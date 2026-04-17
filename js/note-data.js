@@ -8,7 +8,7 @@ class NoteData {
         // 기본 메타데이터
         this.bpm = 120;
         this.timeSignature = { numerator: 4, denominator: 4 };
-        this.slotsPerBeat = 12; // LCM(분모4, 3) = 12 (16분음표+셋잇단 모두 표현)
+        this.slotsPerBeat = 24; // LCM(분모4, 3) = 12 (16분음표+셋잇단 모두 표현)
         this.totalMeasures = 40;
 
         // 마디 크기(슬롯 수) 계산
@@ -140,13 +140,55 @@ TotalMeasures=${this.totalMeasures}
             'drag_1', 'drag_2', 'drag_3'
         ];
 
+        
         for (const lane of lanesOrder) {
             txt += `[${lane.toUpperCase()}]\n`;
+            let channel = 0
+
+            switch(lane){
+                case 'normal_1':
+                    channel = 11
+                    break;
+                case 'normal_2':
+                    channel = 12
+                    break;
+                case 'normal_2':
+                    channel = 13
+                    break;
+                case 'long_1':
+                    channel = 51;
+                    break;
+                case 'long_2':
+                    channel = 52;
+                    break;
+                case 'long_3':
+                    channel = 53;
+                    break;
+                case 'drag_1':
+                    channel = 18
+                    break;
+                case 'drag_1':
+                    channel = 19
+                    break;
+                case 'drag_1':
+                    channel = 20
+                    break;
+                default:
+                    channel = 11
+                    break;
+                    
+            }
             
             for (let m = 1; m <= this.totalMeasures; m++) {
                 let mData = this.getMeasureData(lane, m);
+            
+                mData = mData
+                    .split('')
+                    .map(v => v === '1' ? '01' : '00')
+                    .join('');
+            
                 if (mData.includes('1')) {
-                    txt += `#${m.toString().padStart(3, '0')}:${mData}\n`;
+                    txt += `#${(m-1).toString().padStart(3, '0')}${channel.toString().padStart(2, '0')}:${mData}\n`;
                 }
             }
             txt += "\n";
