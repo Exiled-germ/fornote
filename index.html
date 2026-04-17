@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BMS Style Note Editor</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/@tonejs/midi"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Toolbar -->
+        <header class="toolbar">
+            <div class="toolbar-section">
+                <h1 class="logo">Note Editor</h1>
+            </div>
+
+            <!-- MIDI 로드 후 자동 인식된 정보 표시 -->
+            <div class="toolbar-section info-bar" id="midi-info-bar">
+                <span class="info-tag" id="info-bpm">BPM: -</span>
+                <span class="info-tag" id="info-ts">박자: -</span>
+                <span class="info-tag" id="info-measures">마디: -</span>
+            </div>
+
+            <!-- 줌 컨트롤 -->
+            <div class="toolbar-section zoom-controls">
+                <button class="btn small-btn" id="zoom-out-btn" title="축소">−</button>
+                <span class="info-tag" id="zoom-level">100%</span>
+                <button class="btn small-btn" id="zoom-in-btn" title="확대">+</button>
+                <button class="btn small-btn" id="zoom-fit-btn" title="전체 보기">전체</button>
+            </div>
+
+            <div class="toolbar-section actions">
+                <label class="btn primary-btn">
+                    MIDI 로드
+                    <input type="file" id="midi-upload" accept=".mid,.midi">
+                </label>
+                <button id="export-txt-btn" class="btn">TXT 내보내기</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Sidebar -->
+            <aside class="sidebar">
+                <h3>편집 모드</h3>
+                <div class="tool-group" id="edit-mode-group">
+                    <button class="tool-btn active" data-mode="normal">
+                        <span class="color-dot normal-dot"></span> 일반 노트
+                    </button>
+                    <button class="tool-btn" data-mode="long">
+                        <span class="color-dot long-dot"></span> 롱노트
+                    </button>
+                    <button class="tool-btn" data-mode="drag">
+                        <span class="color-dot drag-dot"></span> 드래그 노트
+                    </button>
+                    <button class="tool-btn" id="delete-mode-btn" data-mode="delete">
+                        <span class="color-dot delete-dot">X</span> 지우개
+                    </button>
+                </div>
+
+                <h3>에디팅 행 (LANE)</h3>
+                <div class="tool-group" id="lane-select-group">
+                    <button class="lane-btn active" data-lane="1">Lane 1</button>
+                    <button class="lane-btn" data-lane="2">Lane 2</button>
+                    <button class="lane-btn" data-lane="3">Lane 3</button>
+                </div>
+                <p class="help-text">
+                    <strong>조작:</strong><br/>
+                    - 휠: 상하 스크롤<br/>
+                    - Ctrl+휠: 줌 인/아웃<br/>
+                    - 좌클릭: 노트 배치<br/>
+                    - 드래그: 구간 설정 (롱/드래그)
+                </p>
+            </aside>
+
+            <!-- Center Canvas Area -->
+            <main class="editor-area">
+                <div class="canvas-container">
+                    <canvas id="grid-canvas"></canvas>
+                </div>
+            </main>
+
+            <!-- Right Sidebar -->
+            <aside class="right-panel">
+                <h3>정보</h3>
+                <div class="info-group">
+                    <p>현재 마우스 위치:</p>
+                    <p id="mouse-info" class="code-font">-</p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script src="js/note-data.js"></script>
+    <script src="js/midi-parser.js"></script>
+    <script src="js/grid-renderer.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/exporter.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

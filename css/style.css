@@ -1,0 +1,250 @@
+/* Reset & Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-main: #13131c;
+    --bg-toolbar: #1a1a2e;
+    --bg-panel: #16213e;
+    --border-color: #2a2a4a;
+    --text-primary: #f0f0f0;
+    --text-secondary: #a0a0c0;
+    --accent-color: #4a4a8a;
+    --accent-hover: #5a5aba;
+    --color-normal: #ff3366;
+    --color-long: #00e676;
+    --color-drag: #ff9100;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Toolbar */
+.toolbar {
+    height: 50px;
+    background-color: var(--bg-toolbar);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px;
+    z-index: 10;
+    gap: 12px;
+}
+
+.toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    background: linear-gradient(90deg, #ff3366, #ff9100);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    white-space: nowrap;
+}
+
+/* Info Tags (auto-detected from MIDI) */
+.info-bar {
+    gap: 6px;
+}
+
+.info-tag {
+    background: rgba(255,255,255,0.08);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    user-select: none;
+}
+
+/* Zoom Controls */
+.zoom-controls {
+    gap: 4px;
+}
+
+.small-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+#zoom-fit-btn {
+    width: auto;
+    padding: 0 8px;
+    font-size: 0.75rem;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+.btn {
+    background-color: #2a2a4a;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    background-color: #3a3a6a;
+}
+
+.primary-btn {
+    background-color: #4a4a8a;
+}
+
+.primary-btn:hover {
+    background-color: var(--accent-hover);
+}
+
+/* Main Content Area */
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebars */
+.sidebar, .right-panel {
+    width: 180px;
+    background-color: var(--bg-panel);
+    border-right: 1px solid var(--border-color);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+.right-panel {
+    border-right: none;
+    border-left: 1px solid var(--border-color);
+    width: 160px;
+}
+
+h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+}
+
+.tool-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tool-btn, .lane-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.tool-btn:hover, .lane-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tool-btn.active, .lane-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-hover);
+}
+
+.color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.normal-dot { background-color: var(--color-normal); }
+.long-dot { background-color: var(--color-long); border-radius: 2px; }
+.drag-dot { background-color: var(--color-drag); border-radius: 2px; }
+.delete-dot { 
+    background-color: transparent; 
+    border: 1px solid #ff5555; 
+    color: #ff5555; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-size: 9px;
+    font-weight: bold;
+}
+
+.help-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-top: auto;
+}
+
+/* Canvas Area */
+.editor-area {
+    flex: 1;
+    position: relative;
+    background-color: var(--bg-main);
+    overflow: hidden;
+}
+
+.canvas-container {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+canvas {
+    display: block;
+    cursor: crosshair;
+}
+
+.code-font {
+    font-family: monospace;
+    color: var(--accent-hover);
+    font-size: 0.8rem;
+    white-space: pre-line;
+}
+
+.info-group {
+    font-size: 0.85rem;
+}
