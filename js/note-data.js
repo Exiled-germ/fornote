@@ -151,11 +151,11 @@ SlotsPerBeat=${this.slotsPerBeat}
 TotalMeasures=${this.totalMeasures}
 \n`;
 
+        // MIDI 레인 제외 (사용자가 직접 작성한 노트만 내보내기)
         const lanesOrder = [
             'normal_1', 'normal_2', 'normal_3',
             'long_1', 'long_2', 'long_3',
-            'drag_1', 'drag_2', 'drag_3',
-            'midi_1'
+            'drag_1', 'drag_2', 'drag_3'
         ];
 
         for (const lane of lanesOrder) {

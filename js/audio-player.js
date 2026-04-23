@@ -113,7 +113,14 @@ class AudioPlayer {
         if (this.isPlaying) {
             this.pause();
         } else {
-            this.play(fromMeasure);
+            // fromMeasure가 명시적으로 지정되지 않았고, 일시정지 상태가 아니면 처음부터
+            if (fromMeasure === null && (!this.virtualCurrentTime || this.virtualCurrentTime === 0)) {
+                // 처음부터 재생
+                this.play(null);
+            } else {
+                // 일시정지 위치에서 재개 또는 특정 마디부터
+                this.play(fromMeasure);
+            }
         }
     }
 
@@ -127,6 +134,13 @@ class AudioPlayer {
         this.playbackRate = rate;
         if (this.audioElement) {
             this.audioElement.playbackRate = rate;
+        }
+        // MIDI 재생 중이면 재스케줄링 필요
+        if (this.isPlaying && this.audioCtx && !this.audioElement) {
+            console.log(`[MIDI] 배속 변경: ${rate}x - 재스케줄링 필요`);
+            // 기존 스케줄링 초기화
+            this._stopOscillators();
+            this.midiLastScheduledTime = this.virtualCurrentTime || this.midiPlaybackOffset;
         }
     }
 
@@ -182,9 +196,20 @@ class AudioPlayer {
         this.isPlaying = true;
         
         // 시작 시간 계산 (초 단위)
-        const startTimeInSec = fromMeasure !== null ? this._measureToTime(fromMeasure) : 0;
+        let startTimeInSec;
+        if (fromMeasure !== null) {
+            // 특정 마디부터 재생
+            startTimeInSec = this._measureToTime(fromMeasure);
+        } else if (this.virtualCurrentTime !== undefined && this.virtualCurrentTime > 0) {
+            // 일시정지 후 재개: 저장된 위치부터
+            startTimeInSec = this.virtualCurrentTime;
+            console.log(`[MIDI] 일시정지 위치에서 재개: ${startTimeInSec.toFixed(3)}초`);
+        } else {
+            // 처음부터 재생
+            startTimeInSec = 0;
+        }
         
-        console.log(`[MIDI] 재생 시작 - 마디: ${fromMeasure || 1}, 시간: ${startTimeInSec.toFixed(3)}초`);
+        console.log(`[MIDI] 재생 시작 - 마디: ${fromMeasure || '현재'}, 시간: ${startTimeInSec.toFixed(3)}초`);
         
         // 현재 AudioContext 시간 저장
         this.midiPlaybackStartTime = this.audioCtx.currentTime;
@@ -203,7 +228,7 @@ class AudioPlayer {
 
     _scheduleMidiNotesChunk() {
         const now = this.audioCtx.currentTime;
-        const currentPlayTime = this.midiPlaybackOffset + (now - this.midiPlaybackStartTime);
+        const currentPlayTime = this.midiPlaybackOffset + (now - this.midiPlaybackStartTime) * this.playbackRate;
         const scheduleUntil = currentPlayTime + this.midiScheduleAheadTime;
         
         let scheduled = 0;
@@ -215,13 +240,14 @@ class AudioPlayer {
             // 스케줄링 범위를 벗어나면 중단
             if (note.time > scheduleUntil) return;
             
-            // 실제 재생 시간 = 현재 시간 + (노트 시간 - 현재 재생 시간)
-            const playAt = now + (note.time - currentPlayTime);
+            // 실제 재생 시간 = 현재 시간 + (노트 시간 - 현재 재생 시간) / 배속
+            const playAt = now + (note.time - currentPlayTime) / this.playbackRate;
             
             // 과거 시간이면 스킵
             if (playAt < now) return;
             
-            const duration = Math.max(0.05, note.duration);
+            // 노트 길이도 배속 적용
+            const duration = Math.max(0.05, note.duration / this.playbackRate);
             
             // 오실레이터 생성
             const osc = this.audioCtx.createOscillator();
@@ -255,14 +281,14 @@ class AudioPlayer {
             
             // 처음 3개만 로그
             if (scheduled <= 3) {
-                console.log(`  [${idx}] midi=${note.midi}, time=${note.time.toFixed(3)}s → play at ${playAt.toFixed(3)}s (+${(playAt - now).toFixed(3)}s)`);
+                console.log(`  [${idx}] midi=${note.midi}, time=${note.time.toFixed(3)}s → play at ${playAt.toFixed(3)}s (+${(playAt - now).toFixed(3)}s), rate=${this.playbackRate}x`);
             }
         });
         
         this.midiLastScheduledTime = scheduleUntil;
         
         if (scheduled > 0) {
-            console.log(`[MIDI] 청크 스케줄링: ${scheduled}개 (${currentPlayTime.toFixed(1)}s ~ ${scheduleUntil.toFixed(1)}s)`);
+            console.log(`[MIDI] 청크 스케줄링: ${scheduled}개 (${currentPlayTime.toFixed(1)}s ~ ${scheduleUntil.toFixed(1)}s) at ${this.playbackRate}x`);
         }
     }
 
@@ -283,7 +309,11 @@ class AudioPlayer {
         this.isPlaying = false;
         if (this.audioElement) {
             this.audioElement.pause();
-        } else {
+        } else if (this.audioCtx) {
+            // MIDI 재생 중 일시정지: 현재 재생 위치 저장
+            const elapsed = this.audioCtx.currentTime - this.midiPlaybackStartTime;
+            this.virtualCurrentTime = this.midiPlaybackOffset + elapsed * this.playbackRate;
+            console.log(`[MIDI] 일시정지 - 현재 위치: ${this.virtualCurrentTime.toFixed(3)}초`);
             this._stopOscillators();
         }
         this._stopLoop();
@@ -331,7 +361,7 @@ class AudioPlayer {
         } else if (this.audioCtx) {
             // MIDI 가상 오디오 재생 모드
             const elapsed = this.audioCtx.currentTime - this.midiPlaybackStartTime;
-            this.virtualCurrentTime = this.midiPlaybackOffset + elapsed;
+            this.virtualCurrentTime = this.midiPlaybackOffset + elapsed * this.playbackRate;
             this.currentTimeSec = this.virtualCurrentTime;
             
             // 추가 스케줄링 (재생 중 계속 노트 추가)
