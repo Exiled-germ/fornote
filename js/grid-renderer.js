@@ -15,13 +15,16 @@ class GridRenderer {
         this.laneNames = [
             'normal_1', 'normal_2', 'normal_3',
             'long_1', 'long_2', 'long_3',
-            'drag_1', 'drag_2', 'drag_3'
+            'drag_1', 'drag_2', 'drag_3',
+            'midi_1'
         ];
         this.laneWidth = 60;
         this.measureLabelWidth = 60;
         this.defaultSlotHeight = 30;
         this.slotHeight = 30;
         this.scrollY = 0;
+        
+        this.currentPlaybackSlot = null; // 오디오 재생 중인 현재 슬롯 위치
 
         this.init();
     }
@@ -72,6 +75,19 @@ class GridRenderer {
         this.render();
     }
 
+    setCurrentPlaybackSlot(slot) {
+        this.currentPlaybackSlot = slot;
+        
+        // 재생 중 자동 스크롤 (화면 하단 1/3에 위치하도록)
+        const targetY = slot * this.slotHeight;
+        if (targetY > this.scrollY + this.height * 0.7 || targetY < this.scrollY + this.height * 0.1) {
+             this.scrollY = targetY - this.height * 0.3;
+             if (this.scrollY < 0) this.scrollY = 0;
+        }
+        
+        this.render();
+    }
+
     getZoomPercent() {
         return Math.round((this.slotHeight / this.defaultSlotHeight) * 100);
     }
@@ -81,11 +97,44 @@ class GridRenderer {
         if (el) el.textContent = this.getZoomPercent() + '%';
     }
 
+    getTotalHeight() {
+        return this.noteData.totalMeasures * this.noteData.slotsPerMeasure * this.slotHeight;
+    }
+
+    getMaxScroll() {
+        return Math.max(0, this.getTotalHeight() - this.height);
+    }
+
+    updateScrollbar() {
+        const track = document.getElementById('scrollbar-track');
+        const thumb = document.getElementById('scrollbar-thumb');
+        if (!track || !thumb) return;
+
+        const maxScroll = this.getMaxScroll();
+        if (maxScroll <= 0) {
+            thumb.style.height = '100%';
+            thumb.style.top = '0px';
+            return;
+        }
+
+        const trackH = track.clientHeight;
+        const totalHeight = this.getTotalHeight();
+        const viewRatio = Math.min(1, this.height / totalHeight);
+        const thumbH = Math.max(30, trackH * viewRatio);
+        
+        const scrollRatio = this.scrollY / maxScroll;
+        const thumbTop = scrollRatio * (trackH - thumbH);
+
+        thumb.style.height = thumbH + 'px';
+        thumb.style.top = Math.max(0, Math.min(trackH - thumbH, thumbTop)) + 'px';
+    }
+
     scroll(delta) {
         this.scrollY += delta;
         if (this.scrollY < 0) this.scrollY = 0;
-        const totalHeight = this.noteData.totalMeasures * this.noteData.slotsPerMeasure * this.slotHeight;
-        if (this.scrollY > totalHeight) this.scrollY = totalHeight;
+        const maxScroll = this.getMaxScroll();
+        if (this.scrollY > maxScroll) this.scrollY = maxScroll;
+        this.updateScrollbar();
         this.render();
     }
 
@@ -93,9 +142,16 @@ class GridRenderer {
     scrollToMeasure(measureIndex) {
         const absSlot = this.noteData.getAbsoluteSlotIndex(measureIndex, 0);
         const targetY = absSlot * this.slotHeight;
+        
         // 해당 마디가 화면 하단 1/3 지점에 오도록
-        this.scrollY = targetY - this.height * 0.3;
-        if (this.scrollY < 0) this.scrollY = 0;
+        let newScrollY = targetY - this.height * 0.3;
+        
+        const maxScroll = this.getMaxScroll();
+        if (newScrollY < 0) newScrollY = 0;
+        if (newScrollY > maxScroll) newScrollY = maxScroll;
+        
+        this.scrollY = newScrollY;
+        this.updateScrollbar();
         this.render();
     }
 
@@ -117,6 +173,22 @@ class GridRenderer {
         if (x < startX) return -1;
         const laneIndex = Math.floor((x - startX) / this.laneWidth);
         if (laneIndex >= 0 && laneIndex < this.laneNames.length) return laneIndex;
+        return -1;
+    }
+    
+    // 클릭한 위치가 우측 마디 번호 영역인지 확인
+    getMeasureFromClick(x, y) {
+        const gridStartX = this.getGridStartX();
+        const gridEndX = gridStartX + (this.laneNames.length * this.laneWidth);
+        
+        if (x >= gridEndX && x <= gridEndX + this.measureLabelWidth) {
+            // y 위치 기반으로 가장 가까운 마디 찾기
+            const absSlot = this.getSlotFromY(y);
+            const measure = Math.floor(absSlot / this.noteData.slotsPerMeasure) + 1;
+            if (measure >= 1 && measure <= this.noteData.totalMeasures) {
+                return measure;
+            }
+        }
         return -1;
     }
 
@@ -208,7 +280,8 @@ class GridRenderer {
                 const name = this.laneNames[i];
                 const disp = name.startsWith("n") ? "Nml " + name.split('_')[1] :
                              name.startsWith("l") ? "Lng " + name.split('_')[1] :
-                             "Drg " + name.split('_')[1];
+                             name.startsWith("d") ? "Drg " + name.split('_')[1] :
+                             "Midi " + name.split('_')[1];
                 ctx.fillText(disp, x + this.laneWidth / 2, 15);
             }
         }
@@ -248,10 +321,10 @@ class GridRenderer {
                     // mData[s] === '1' 인 경우
                     const noteY = this.getY(m, s);
 
-                    if (type === 'normal') {
+                    if (type === 'normal' || type === 'midi') {
                         // 화면 범위 체크
                         if (noteY >= -30 && noteY <= this.height + 30) {
-                            ctx.fillStyle = "#ff3366";
+                            ctx.fillStyle = type === 'midi' ? "#b388ff" : "#ff3366";
                             const ch = Math.max(6, this.slotHeight * 0.4);
                             ctx.fillRect(laneX + 3, noteY - ch / 2, this.laneWidth - 6, ch);
                             drawnCount++;
@@ -279,6 +352,23 @@ class GridRenderer {
                         }
                     }
                 }
+            }
+        }
+
+        // ===== 3.5 플레이라인 (재생 위치) =====
+        if (this.currentPlaybackSlot !== null) {
+            const playY = this.height - (this.currentPlaybackSlot * this.slotHeight - this.scrollY);
+            if (playY >= 0 && playY <= this.height) {
+                ctx.strokeStyle = "#ff0000";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(gridStartX, playY);
+                ctx.lineTo(gridEndX, playY);
+                ctx.stroke();
+                
+                // 빛나는 효과
+                ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+                ctx.fillRect(gridStartX, playY - 10, gridEndX - gridStartX, 20);
             }
         }
 

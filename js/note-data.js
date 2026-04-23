@@ -8,17 +8,18 @@ class NoteData {
         // 기본 메타데이터
         this.bpm = 120;
         this.timeSignature = { numerator: 4, denominator: 4 };
-        this.slotsPerBeat = 12; // LCM(분모4, 3) = 12 (16분음표+셋잇단 모두 표현)
-        this.totalMeasures = 40;
+        this.slotsPerBeat = 8; // 한 박자에 8칸 (한 마디 32칸)
+        this.totalMeasures = 100; // 충분한 기본 마디 제공
 
         // 마디 크기(슬롯 수) 계산
         this.slotsPerMeasure = this.timeSignature.numerator * this.slotsPerBeat;
 
-        // 9개 행 초기화
+        // 10개 행 초기화 (midi_1 추가)
         this.lanes = {
             normal_1: {}, normal_2: {}, normal_3: {},
             long_1: {}, long_2: {}, long_3: {},
-            drag_1: {}, drag_2: {}, drag_3: {}
+            drag_1: {}, drag_2: {}, drag_3: {},
+            midi_1: {}
         };
     }
 
@@ -109,6 +110,22 @@ class NoteData {
         }
     }
 
+    setLongDragRange(laneName, absStart, absEnd, headVal, bodyVal, tailVal) {
+        let start = Math.min(absStart, absEnd);
+        let end = Math.max(absStart, absEnd);
+
+        for (let i = start; i <= end; i++) {
+            let { measureIndex, slotIndex } = this.getMeasureAndSlotFromAbsolute(i);
+            if (measureIndex > this.totalMeasures) break;
+            
+            let val = bodyVal;
+            if (i === start) val = headVal;
+            else if (i === end) val = tailVal;
+            
+            this.setSlot(laneName, measureIndex, slotIndex, val);
+        }
+    }
+
     // 전체 데이터 클리어
     clearAll() {
         for (let lane in this.lanes) {
@@ -116,13 +133,13 @@ class NoteData {
         }
     }
 
-    // MIDI에서 추출된 노트를 Normal 1에만 추가합니다.
+    // MIDI에서 추출된 노트를 Midi 1에만 추가합니다.
     addNoteFromAbsoluteTime(absSlotIndex) {
         let { measureIndex, slotIndex } = this.getMeasureAndSlotFromAbsolute(absSlotIndex);
         if (measureIndex > this.totalMeasures) return;
 
-        // Normal 1에만 배치 (중복 위치 무시)
-        this.setSlot('normal_1', measureIndex, slotIndex, '1');
+        // Midi 1에만 배치 (중복 위치 무시)
+        this.setSlot('midi_1', measureIndex, slotIndex, '1');
     }
 
     // 데이터를 Export 포맷 텍스트로 변환
@@ -137,7 +154,8 @@ TotalMeasures=${this.totalMeasures}
         const lanesOrder = [
             'normal_1', 'normal_2', 'normal_3',
             'long_1', 'long_2', 'long_3',
-            'drag_1', 'drag_2', 'drag_3'
+            'drag_1', 'drag_2', 'drag_3',
+            'midi_1'
         ];
 
         for (const lane of lanesOrder) {
@@ -153,5 +171,58 @@ TotalMeasures=${this.totalMeasures}
         }
 
         return txt;
+    }
+
+    // TXT 데이터 파싱 및 로드
+    importFromTXT(text) {
+        try {
+            const lines = text.split('\n');
+            let currentSection = null;
+            
+            // 메타데이터 임시 저장
+            let bpm = 120, num = 4, den = 4, spb = 12, totalM = 40;
+
+            // 데이터 클리어
+            this.clearAll();
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+
+                if (line.startsWith('[')) {
+                    currentSection = line.substring(1, line.length - 1).toLowerCase();
+                    continue;
+                }
+
+                if (currentSection === 'header') {
+                    if (line.startsWith('BPM=')) bpm = parseFloat(line.split('=')[1]);
+                    else if (line.startsWith('TimeSignature=')) {
+                        const parts = line.split('=')[1].split('/');
+                        num = parseInt(parts[0]);
+                        den = parseInt(parts[1]);
+                    }
+                    else if (line.startsWith('SlotsPerBeat=')) spb = parseInt(line.split('=')[1]);
+                    else if (line.startsWith('TotalMeasures=')) totalM = parseInt(line.split('=')[1]);
+                } else if (currentSection && this.lanes[currentSection]) {
+                    // 예: #001:00100...
+                    if (line.startsWith('#')) {
+                        const parts = line.split(':');
+                        const mIndex = parseInt(parts[0].substring(1));
+                        const mData = parts[1];
+                        
+                        if (mIndex >= 1 && mIndex <= totalM) {
+                            this.lanes[currentSection][mIndex] = mData;
+                        }
+                    }
+                }
+            }
+
+            // 메타데이터 적용
+            this.updateMetadata(bpm, num, den, spb, totalM);
+            return true;
+        } catch (error) {
+            console.error("TXT import failed:", error);
+            return false;
+        }
     }
 }

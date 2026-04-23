@@ -6,6 +6,7 @@
     <title>BMS Style Note Editor</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://unpkg.com/@tonejs/midi"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -31,53 +32,98 @@
                 <button class="btn small-btn" id="zoom-fit-btn" title="전체 보기">전체</button>
             </div>
 
+            <!-- 재생 컨트롤 -->
+            <div class="toolbar-section playback-controls">
+                <button class="btn play-btn" id="play-btn" title="재생">▶</button>
+                <button class="btn" id="pause-btn" title="일시정지">⏸</button>
+                <button class="btn" id="stop-btn" title="정지">⏹</button>
+                <select id="speed-select" class="speed-select" title="배속">
+                    <option value="0.25">0.25x</option>
+                    <option value="0.3">0.3x</option>
+                    <option value="0.4">0.4x</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                </select>
+                <div class="offset-control" title="오디오 오프셋 (ms): 양수=노트가 빠름, 음수=노트가 느림">
+                    <label for="audio-offset" style="font-size:0.7rem; color: var(--text-secondary);">오프셋</label>
+                    <input type="number" id="audio-offset" class="num-input" value="0" step="50" style="width:55px;">
+                    <span style="font-size:0.65rem; color: var(--text-secondary);">ms</span>
+                </div>
+            </div>
+
             <div class="toolbar-section actions">
                 <label class="btn primary-btn">
-                    MIDI 로드
+                    🎵 오디오
+                    <input type="file" id="audio-upload" accept="audio/*">
+                </label>
+                <label class="btn primary-btn">
+                    MIDI
                     <input type="file" id="midi-upload" accept=".mid,.midi">
                 </label>
-                <button id="export-txt-btn" class="btn">TXT 내보내기</button>
+                <label class="btn">
+                    TXT 로드
+                    <input type="file" id="txt-upload" accept=".txt">
+                </label>
+                <button id="export-txt-btn" class="btn">TXT 저장</button>
             </div>
         </header>
 
         <div class="main-content">
             <!-- Left Sidebar -->
             <aside class="sidebar">
-                <h3>편집 모드</h3>
-                <div class="tool-group" id="edit-mode-group">
-                    <button class="tool-btn active" data-mode="normal">
-                        <span class="color-dot normal-dot"></span> 일반 노트
+                <h3>모드</h3>
+                <div class="tool-group">
+                    <button class="tool-btn active main-mode-btn" data-mode="draw">
+                        <span class="mode-icon">✏️</span> 그리기
                     </button>
-                    <button class="tool-btn" data-mode="long">
-                        <span class="color-dot long-dot"></span> 롱노트
-                    </button>
-                    <button class="tool-btn" data-mode="drag">
-                        <span class="color-dot drag-dot"></span> 드래그 노트
-                    </button>
-                    <button class="tool-btn" id="delete-mode-btn" data-mode="delete">
-                        <span class="color-dot delete-dot">X</span> 지우개
+                    <button class="tool-btn main-mode-btn" data-mode="erase">
+                        <span class="mode-icon">🧹</span> 지우기
                     </button>
                 </div>
 
-                <h3>에디팅 행 (LANE)</h3>
+                <h3>레인 선택</h3>
                 <div class="tool-group" id="lane-select-group">
                     <button class="lane-btn active" data-lane="1">Lane 1</button>
                     <button class="lane-btn" data-lane="2">Lane 2</button>
                     <button class="lane-btn" data-lane="3">Lane 3</button>
                 </div>
+
+                <h3>복사 / 붙여넣기</h3>
+                <div class="clipboard-group">
+                    <div class="clipboard-row">
+                        <input type="number" id="copy-start" class="num-input" placeholder="시작" min="1">
+                        <span>~</span>
+                        <input type="number" id="copy-end" class="num-input" placeholder="끝" min="1">
+                        <button id="copy-btn" class="btn tiny-btn">복사</button>
+                    </div>
+                    <div class="clipboard-row">
+                        <span style="font-size:0.75rem;">대상:</span>
+                        <input type="number" id="paste-target" class="num-input" placeholder="마디" min="1">
+                        <button id="paste-btn" class="btn tiny-btn">붙여넣기</button>
+                    </div>
+                </div>
+
                 <p class="help-text">
                     <strong>조작:</strong><br/>
-                    - 휠: 상하 스크롤<br/>
-                    - Ctrl+휠: 줌 인/아웃<br/>
-                    - 좌클릭: 노트 배치<br/>
-                    - 드래그: 구간 설정 (롱/드래그)
+                    휠: 스크롤 | Ctrl+휠: 줌<br/>
+                    좌클릭: 노트 배치/삭제<br/>
+                    Ctrl+Z: 취소 | Ctrl+Y: 복원<br/>
+                    마디 번호 클릭: 재생
                 </p>
             </aside>
 
             <!-- Center Canvas Area -->
             <main class="editor-area">
-                <div class="canvas-container">
-                    <canvas id="grid-canvas"></canvas>
+                <div class="canvas-scroll-wrapper">
+                    <div class="canvas-container">
+                        <canvas id="grid-canvas"></canvas>
+                    </div>
+                    <div class="scrollbar-track" id="scrollbar-track">
+                        <div class="scrollbar-thumb" id="scrollbar-thumb"></div>
+                    </div>
                 </div>
             </main>
 
@@ -92,6 +138,9 @@
         </div>
     </div>
 
+    <script src="js/undo-manager.js"></script>
+    <script src="js/clipboard-manager.js"></script>
+    <script src="js/audio-player.js"></script>
     <script src="js/note-data.js"></script>
     <script src="js/midi-parser.js"></script>
     <script src="js/grid-renderer.js"></script>
