@@ -238,7 +238,11 @@ class Editor {
     }
 
     handleNoteKeyDown(key) {
-        if (this.renderer.currentPlaybackSlot === null) return; // 재생/일시정지 위치가 없을 땐 무시
+        // 재생 중이 아니면 무시
+        if (this.renderer.currentPlaybackSlot === null) {
+            console.warn('[Editor] 키보드 노트 입력은 재생 중에만 가능합니다.');
+            return;
+        }
         
         // 부동 소수점 인덱스로 배열에 접근하는 것을 방지하기 위해 정수로 반올림
         const absSlot = Math.round(this.renderer.currentPlaybackSlot);
@@ -247,22 +251,50 @@ class Editor {
         this.undoManager.saveState();
 
         switch(key) {
-            case 'a': this.noteData.setSlot('normal_1', measureIndex, slotIndex, '1'); break;
-            case 's': this.noteData.setSlot('normal_2', measureIndex, slotIndex, '1'); break;
-            case 'd': this.noteData.setSlot('normal_3', measureIndex, slotIndex, '1'); break;
+            case 'a': 
+                this.noteData.setSlot('normal_1', measureIndex, slotIndex, '1'); 
+                console.log(`[Editor] Normal 1 노트 배치: measure=${measureIndex}, slot=${slotIndex}`);
+                break;
+            case 's': 
+                this.noteData.setSlot('normal_2', measureIndex, slotIndex, '1'); 
+                console.log(`[Editor] Normal 2 노트 배치: measure=${measureIndex}, slot=${slotIndex}`);
+                break;
+            case 'd': 
+                this.noteData.setSlot('normal_3', measureIndex, slotIndex, '1'); 
+                console.log(`[Editor] Normal 3 노트 배치: measure=${measureIndex}, slot=${slotIndex}`);
+                break;
             
-            case 'f': this.noteStartSlots['long_1'] = absSlot; break;
-            case 'g': this.noteStartSlots['long_2'] = absSlot; break;
-            case 'h': this.noteStartSlots['long_3'] = absSlot; break;
+            case 'f': 
+                this.noteStartSlots['long_1'] = absSlot; 
+                console.log(`[Editor] Long 1 시작: absSlot=${absSlot}`);
+                break;
+            case 'g': 
+                this.noteStartSlots['long_2'] = absSlot; 
+                console.log(`[Editor] Long 2 시작: absSlot=${absSlot}`);
+                break;
+            case 'h': 
+                this.noteStartSlots['long_3'] = absSlot; 
+                console.log(`[Editor] Long 3 시작: absSlot=${absSlot}`);
+                break;
             
-            case 'j': this.noteStartSlots['drag_1'] = absSlot; break;
-            case 'k': this.noteStartSlots['drag_2'] = absSlot; break;
-            case 'l': this.noteStartSlots['drag_3'] = absSlot; break;
+            case 'j': 
+                this.noteStartSlots['drag_1'] = absSlot; 
+                console.log(`[Editor] Drag 1 시작: absSlot=${absSlot}`);
+                break;
+            case 'k': 
+                this.noteStartSlots['drag_2'] = absSlot; 
+                console.log(`[Editor] Drag 2 시작: absSlot=${absSlot}`);
+                break;
+            case 'l': 
+                this.noteStartSlots['drag_3'] = absSlot; 
+                console.log(`[Editor] Drag 3 시작: absSlot=${absSlot}`);
+                break;
         }
         this.renderer.render();
     }
 
     handleNoteKeyUp(key) {
+        // 재생 중이 아니면 무시
         if (this.renderer.currentPlaybackSlot === null) return;
         
         const absSlot = Math.round(this.renderer.currentPlaybackSlot);
@@ -286,14 +318,18 @@ class Editor {
                 const s = Math.min(startSlot, endSlot);
                 const e = Math.max(startSlot, endSlot);
                 
+                console.log(`[Editor] ${config.type === 'long' ? 'Long' : 'Drag'} ${config.lane.split('_')[1]} 완료: start=${s}, end=${e}, length=${e-s+1}`);
+                
                 if (config.type === 'long') {
-                    this.noteData.setLongDragRange(config.lane, s, e, '2', '3', '4');
+                    this.noteData.setLongDragRange(config.lane, s, e, '1', '1', '1');
                 } else if (config.type === 'drag') {
-                    this.noteData.setLongDragRange(config.lane, s, e, '5', '6', '5'); // 드래그는 머리/꼬리가 5
+                    this.noteData.setLongDragRange(config.lane, s, e, '1', '1', '1');
                 }
                 
                 delete this.noteStartSlots[config.lane];
                 this.renderer.render();
+            } else {
+                console.warn(`[Editor] ${key} 키를 떼었지만 시작 슬롯이 없습니다.`);
             }
         }
     }

@@ -133,10 +133,15 @@ class AudioPlayer {
     play(fromMeasure = null) {
         if (!this.audioElement) {
             // 오디오 없으면 MIDI 재생 모드 시도
+            console.log('[AudioPlayer] 오디오 파일 없음, MIDI 재생 시도');
+            console.log('[AudioPlayer] midiNotes 개수:', this.midiNotes ? this.midiNotes.length : 0);
+            
             if (!this.midiNotes || this.midiNotes.length === 0) {
-                this.showNotification("❌ 재생할 오디오나 MIDI가 없습니다.", true);
+                this.showNotification("❌ 재생할 오디오나 MIDI가 없습니다. 오디오 파일(WAV/MP3)을 로드하세요.", true);
                 return;
             }
+            
+            console.log('[AudioPlayer] MIDI 재생 시작');
             this._startMidiPlayback(fromMeasure);
             return;
         }
@@ -166,6 +171,7 @@ class AudioPlayer {
     }
 
     _startMidiPlayback(fromMeasure) {
+        // AudioContext 초기화
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
@@ -174,50 +180,100 @@ class AudioPlayer {
         }
         
         this.isPlaying = true;
-        const targetTime = fromMeasure !== null ? this._measureToTime(fromMeasure) : this.virtualCurrentTime || 0;
         
-        this.virtualStartTime = this.audioCtx.currentTime - (targetTime / this.playbackRate);
+        // 시작 시간 계산 (초 단위)
+        const startTimeInSec = fromMeasure !== null ? this._measureToTime(fromMeasure) : 0;
         
-        this._scheduleMidiNotes(targetTime);
+        console.log(`[MIDI] 재생 시작 - 마디: ${fromMeasure || 1}, 시간: ${startTimeInSec.toFixed(3)}초`);
+        
+        // 현재 AudioContext 시간 저장
+        this.midiPlaybackStartTime = this.audioCtx.currentTime;
+        this.midiPlaybackOffset = startTimeInSec;
+        this.midiScheduleAheadTime = 5.0; // 5초 앞까지만 스케줄링
+        this.midiLastScheduledTime = startTimeInSec;
+        
+        // 초기 스케줄링
+        this._scheduleMidiNotesChunk();
+        
+        // 플레이라인 업데이트 루프 시작
         this._startLoop();
+        
+        this.showNotification(`🎹 MIDI 재생 (${this.midiNotes.length}개 노트)`);
     }
 
-    _scheduleMidiNotes(startTime) {
-        // 기존 예약된 오실레이터 정지
-        this._stopOscillators();
+    _scheduleMidiNotesChunk() {
+        const now = this.audioCtx.currentTime;
+        const currentPlayTime = this.midiPlaybackOffset + (now - this.midiPlaybackStartTime);
+        const scheduleUntil = currentPlayTime + this.midiScheduleAheadTime;
         
-        this.midiNotes.forEach(note => {
-            if (note.time >= startTime) {
-                const playTime = this.virtualStartTime + (note.time / this.playbackRate);
-                // 오류 방지를 위해 최소 0.05초의 길이 보장 (0.02초 ramp up/down 필요)
-                const safeDur = Math.max(0.05, note.duration / this.playbackRate);
-                
-                const osc = this.audioCtx.createOscillator();
-                const gain = this.audioCtx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.value = 440 * Math.pow(2, (note.midi - 69) / 12);
-                
-                osc.connect(gain);
-                gain.connect(this.audioCtx.destination);
-                
-                // ADSR (간단한 Envelope)
-                gain.gain.setValueAtTime(0, playTime);
-                gain.gain.linearRampToValueAtTime(0.3, playTime + 0.02);
-                gain.gain.setValueAtTime(0.3, playTime + safeDur - 0.02);
-                gain.gain.linearRampToValueAtTime(0, playTime + safeDur);
-                
-                osc.start(playTime);
-                osc.stop(playTime + safeDur);
-                
-                this.activeOscillators.push(osc);
+        let scheduled = 0;
+        
+        this.midiNotes.forEach((note, idx) => {
+            // 이미 스케줄링한 노트는 스킵
+            if (note.time < this.midiLastScheduledTime) return;
+            
+            // 스케줄링 범위를 벗어나면 중단
+            if (note.time > scheduleUntil) return;
+            
+            // 실제 재생 시간 = 현재 시간 + (노트 시간 - 현재 재생 시간)
+            const playAt = now + (note.time - currentPlayTime);
+            
+            // 과거 시간이면 스킵
+            if (playAt < now) return;
+            
+            const duration = Math.max(0.05, note.duration);
+            
+            // 오실레이터 생성
+            const osc = this.audioCtx.createOscillator();
+            const gainNode = this.audioCtx.createGain();
+            
+            // 주파수 계산 (MIDI 번호 → Hz)
+            const freq = 440 * Math.pow(2, (note.midi - 69) / 12);
+            osc.frequency.value = freq;
+            osc.type = 'sine';
+            
+            // 연결
+            osc.connect(gainNode);
+            gainNode.connect(this.audioCtx.destination);
+            
+            // 볼륨 엔벨로프 (ADSR)
+            const attackTime = 0.01;
+            const releaseTime = 0.01;
+            const sustainLevel = 0.3;
+            
+            gainNode.gain.setValueAtTime(0, playAt);
+            gainNode.gain.linearRampToValueAtTime(sustainLevel, playAt + attackTime);
+            gainNode.gain.setValueAtTime(sustainLevel, playAt + duration - releaseTime);
+            gainNode.gain.linearRampToValueAtTime(0, playAt + duration);
+            
+            // 재생 시작/종료
+            osc.start(playAt);
+            osc.stop(playAt + duration);
+            
+            this.activeOscillators.push(osc);
+            scheduled++;
+            
+            // 처음 3개만 로그
+            if (scheduled <= 3) {
+                console.log(`  [${idx}] midi=${note.midi}, time=${note.time.toFixed(3)}s → play at ${playAt.toFixed(3)}s (+${(playAt - now).toFixed(3)}s)`);
             }
         });
+        
+        this.midiLastScheduledTime = scheduleUntil;
+        
+        if (scheduled > 0) {
+            console.log(`[MIDI] 청크 스케줄링: ${scheduled}개 (${currentPlayTime.toFixed(1)}s ~ ${scheduleUntil.toFixed(1)}s)`);
+        }
     }
 
     _stopOscillators() {
-        if (this.activeOscillators) {
+        if (this.activeOscillators && this.activeOscillators.length > 0) {
+            console.log(`[MIDI] 오실레이터 정리: ${this.activeOscillators.length}개`);
             this.activeOscillators.forEach(osc => { 
-                try { osc.stop(); osc.disconnect(); } catch(e){} 
+                try { 
+                    osc.stop(); 
+                    osc.disconnect(); 
+                } catch(e){} 
             });
             this.activeOscillators = [];
         }
@@ -240,6 +296,8 @@ class AudioPlayer {
             this.audioElement.currentTime = 0;
         } else {
             this.virtualCurrentTime = 0;
+            this.midiPlaybackStartTime = 0;
+            this.midiPlaybackOffset = 0;
             this._stopOscillators();
         }
         this._stopLoop();
@@ -272,14 +330,20 @@ class AudioPlayer {
             }
         } else if (this.audioCtx) {
             // MIDI 가상 오디오 재생 모드
-            this.virtualCurrentTime = (this.audioCtx.currentTime - this.virtualStartTime) * this.playbackRate;
+            const elapsed = this.audioCtx.currentTime - this.midiPlaybackStartTime;
+            this.virtualCurrentTime = this.midiPlaybackOffset + elapsed;
             this.currentTimeSec = this.virtualCurrentTime;
             
+            // 추가 스케줄링 (재생 중 계속 노트 추가)
+            this._scheduleMidiNotesChunk();
+            
             // 마지막 노트가 끝나면 정지
-            const lastNote = this.midiNotes[this.midiNotes.length - 1];
-            if (lastNote && this.currentTimeSec > lastNote.time + lastNote.duration + 1) {
-                this.stop();
-                return;
+            if (this.midiNotes && this.midiNotes.length > 0) {
+                const lastNote = this.midiNotes[this.midiNotes.length - 1];
+                if (this.currentTimeSec > lastNote.time + lastNote.duration + 1) {
+                    this.stop();
+                    return;
+                }
             }
         }
 
