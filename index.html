@@ -65,13 +65,13 @@
                         <option value="drag_3">드래그 3</option>
                     </select>
                     <label class="record-label" style="margin-left:8px;">BPM</label>
-                    <input id="record-bpm-input" type="number" class="record-number-input" value="120" min="10" max="999" step="1">
+                    <input id="record-bpm-input" type="number" class="record-number-input" value="120" min="10" max="999" step="0.001">
                 </div>
                 <div class="record-row">
                     <button id="record-start-btn" class="btn primary-btn">● 녹음 시작</button>
                     <button id="record-stop-btn" class="btn" disabled>■ 녹음 종료</button>
                     <button id="record-bpmchange-btn" class="btn" disabled title="현재 시점에 BPM 변경 마커 삽입">♩ BPM 변경</button>
-                    <input id="record-bpmchange-input" type="number" class="record-number-input" value="120" min="10" max="999" step="1" disabled>
+                    <input id="record-bpmchange-input" type="number" class="record-number-input" value="120" min="10" max="999" step="0.001" disabled>
                     <span id="record-status" class="record-status">대기 중</span>
                     <span id="record-clock-bpm" class="record-clock-bpm hidden"></span>
                 </div>

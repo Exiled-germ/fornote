@@ -17,6 +17,9 @@ class NoteData {
         // BPM 변화 기록: [{ measureIndex, slotIndex, bpm }, ...]  (measureIndex는 1-indexed)
         this.bpmChanges = [];
 
+        // 박자 변화 기록: [{ measureIndex, slotIndex, numerator, denominator }, ...]
+        this.tsChanges = [];
+
         // 9개 행 초기화
         this.lanes = {
             normal_1: {}, normal_2: {}, normal_3: {},
@@ -35,8 +38,9 @@ class NoteData {
         // slotsPerBeat는 이미 분모(den) 기준이므로, 단순히 분자 × slotsPerBeat
         // 예: 4/4 → 4 * 12 = 48, 6/8 → 6 * 24 = 144, 4/16 → 4 * 48 = 192
         this.slotsPerMeasure = num * slotsPerBeat;
-        // MIDI 파일 로드 시 BPM 변화 기록 초기화 (MIDI 파일 자체에서 재설정됨)
+        // MIDI 파일 로드 시 BPM/박자 변화 기록 초기화 (MIDI 파일 자체에서 재설정됨)
         this.bpmChanges = [];
+        this.tsChanges = [];
         console.log(`Metadata updated: BPM=${this.bpm}, TS=${num}/${den}, slotsPerBeat=${slotsPerBeat}, slotsPerMeasure=${this.slotsPerMeasure}`);
     }
 
@@ -120,6 +124,22 @@ class NoteData {
             this.lanes[lane] = {};
         }
         this.bpmChanges = [];
+        this.tsChanges = [];
+    }
+
+    // 박자 변화 추가 (같은 위치에 이미 있으면 교체)
+    addTsChange(measureIndex, slotIndex, numerator, denominator) {
+        this.tsChanges = this.tsChanges.filter(
+            c => !(c.measureIndex === measureIndex && c.slotIndex === slotIndex)
+        );
+        this.tsChanges.push({ measureIndex, slotIndex, numerator, denominator });
+    }
+
+    // 박자 변화 삭제
+    removeTsChange(measureIndex, slotIndex) {
+        this.tsChanges = this.tsChanges.filter(
+            c => !(c.measureIndex === measureIndex && c.slotIndex === slotIndex)
+        );
     }
 
     // MIDI에서 추출된 노트를 Normal 1에만 추가합니다.
@@ -133,22 +153,28 @@ class NoteData {
 
     // 데이터를 Export 포맷 텍스트로 변환 (txtTojson.cs 호환 형식)
     exportToTXT() {
-        let txt = `#BPM ${this.bpm}\n`;
+        // 박자(시그니처)를 반영한 실제 BPM 계산:
+        // 4/4 기준으로 환산 → adjustedBpm = bpm * denominator / numerator
+        // 예) 2/4, BPM 100 → 100 * 4/2 = 200, 소수점 2자리까지 표시
+        const { numerator, denominator } = this.timeSignature;
+        const adjustBpm = (rawBpm) => {
+            const v = rawBpm * denominator / numerator;
+            if (Number.isInteger(v)) return v;
+            return parseFloat(v.toFixed(2));
+        };
 
-        // ── BPM 변화 정의 헤더: 고유 BPM 값마다 #BPMxx value ──
-        // 동일한 BPM 값은 같은 인덱스(01, 02, ..., 0A, 0B, ...)를 공유
-        const bpmValueSet = new Set();
-        for (const change of this.bpmChanges) {
-            bpmValueSet.add(change.bpm);
-        }
+        let txt = `#BPM ${adjustBpm(this.bpm)}\n`;
+
+        // ── BPM 변화 정의 헤더: 고유 raw BPM 값마다 #BPMxx value ──
+        // 0abcb94 방식: Map 키 = raw BPM, channel 08 조회도 raw BPM 기준
+        const bpmValueSet = new Set(this.bpmChanges.map(c => c.bpm));
         const bpmValues = Array.from(bpmValueSet).sort((a, b) => a - b);
-        // bpm 값 → 2자리 대문자 16진수 인덱스 ("01", "02", "0A", ...)
         const bpmIndexMap = new Map();
         bpmValues.forEach((val, i) => {
             bpmIndexMap.set(val, (i + 1).toString(16).padStart(2, '0').toUpperCase());
         });
         for (const [val, idx] of bpmIndexMap) {
-            txt += `#BPM${idx} ${val}\n`;
+            txt += `#BPM${idx} ${adjustBpm(val)}\n`;
         }
 
         txt += `*---------------------- MAIN DATA FIELD\n`;
@@ -189,8 +215,7 @@ class NoteData {
             }
         }
 
-        // ── BPM 변화 채널 (channel 08) ──
-        // 마디별로 그룹핑한 뒤, 슬롯 배열을 구성해 노트처럼 출력
+        // ── BPM 변화 채널 (channel 08): raw BPM 기준 인덱스 조회 (0abcb94 방식) ──
         if (this.bpmChanges.length > 0) {
             const bpmByMeasure = new Map();
             for (const change of this.bpmChanges) {
@@ -200,7 +225,6 @@ class NoteData {
                 bpmByMeasure.get(change.measureIndex).push(change);
             }
 
-            // 마디 순서대로 정렬해 출력
             const sortedMeasures = Array.from(bpmByMeasure.keys()).sort((a, b) => a - b);
             for (const measureIndex of sortedMeasures) {
                 const bar = (measureIndex - 1).toString().padStart(3, '0');
@@ -212,7 +236,6 @@ class NoteData {
                     }
                 }
                 const lineData = slots.join('');
-                // 모든 슬롯이 '00'이 아닐 때만 출력
                 if (lineData !== '00'.repeat(this.slotsPerMeasure)) {
                     txt += `#${bar}08:${lineData}\n`;
                 }
