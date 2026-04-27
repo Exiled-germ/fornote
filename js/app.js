@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 녹음 시작
     startBtn.addEventListener('click', () => {
-        const bpm = parseInt(bpmInput.value, 10) || 120;
+        const bpm = parseFloat(bpmInput.value) || 120;
         const lane = laneSelect.value;
         const deviceId = deviceSelect.value || undefined;
 
@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 녹음 중 BPM 변경 마커 삽입
     bpmChangeBtn.addEventListener('click', () => {
-        const newBpm = parseInt(bpmChangeInput.value, 10);
+        const newBpm = parseFloat(bpmChangeInput.value);
         if (!newBpm || newBpm <= 0) return;
         midiRecorder.markBpmChange(newBpm);
         noteData.bpm = newBpm;

@@ -71,7 +71,7 @@ class MidiParser {
             // BPM 추출
             let bpm = 120;
             if (midi.header && midi.header.tempos && midi.header.tempos.length > 0) {
-                bpm = Math.round(midi.header.tempos[0].bpm);
+                bpm = midi.header.tempos[0].bpm;
             }
 
             // 박자 추출
@@ -190,7 +190,7 @@ class MidiParser {
                         bpmChangeList.push({
                             measureIndex,
                             slotIndex,
-                            bpm: Math.round(tempo.bpm),
+                            bpm: tempo.bpm,
                         });
                     }
                 });
