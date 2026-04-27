@@ -153,24 +153,21 @@ class NoteData {
 
     // 데이터를 Export 포맷 텍스트로 변환 (txtTojson.cs 호환 형식)
     exportToTXT() {
-        // ── TXT 포맷용 유효 BPM: rawBpm × (den ÷ 4) ──
-        // MIDI BPM은 항상 4분음표 기준(quarter notes/min)이므로,
-        // 박자 분모(den)가 나타내는 음표 단위로 환산합니다.
-        //   den=4 (4분음표) → ×1   (4/4, 3/4, 2/4 모두 동일)
-        //   den=8 (8분음표) → ×2   (6/8, 4/8 등)
-        //   den=16(16분음표)→ ×4
-        // 분자(num)는 박자 단위를 바꾸지 않으므로 공식에 포함하지 않습니다.
-        const computeEffectiveBpm = (rawBpm, den) => {
-            const v = rawBpm * den / 4;
+        // ── TXT 포맷용 유효 BPM: rawBpm × den ÷ num (박자 기준 정규화) ──
+        // 에디터 표시는 MIDI 원본 BPM(this.bpm)을 그대로 사용하며,
+        // TXT 파일에는 현재 박자 분모/분자로 보정한 값을 기록합니다.
+        const computeEffectiveBpm = (rawBpm, num, den) => {
+            const v = rawBpm * den / num;
             return Number.isInteger(v) ? v : Math.round(v * 100) / 100;
         };
 
         const initNum = this.timeSignature.numerator;
         const initDen = this.timeSignature.denominator;
-        let txt = `#BPM ${computeEffectiveBpm(this.bpm, initDen)}\n`;
+        let txt = `#BPM ${computeEffectiveBpm(this.bpm, initNum, initDen)}\n`;
 
         // ── bpmChanges + tsChanges를 절대 슬롯 위치 기준으로 병합 ──
-        // 박자가 바뀌면 유효 BPM도 달라지므로 두 이벤트를 모두 반영합니다.
+        // TS가 바뀌면 그 시점 이후 BPM 이벤트의 유효 BPM도 달라지므로 두 이벤트를 함께 추적합니다.
+        // 단, channel 08에는 실제 BPM이 바뀐 위치만 기록합니다.
         const allEvents = [];
         for (const c of this.bpmChanges) {
             allEvents.push({
@@ -188,7 +185,8 @@ class NoteData {
         }
         allEvents.sort((a, b) => a.absSlot - b.absSlot || (a.type === 'bpm' ? -1 : 1));
 
-        // 상태를 추적하며 각 변경 시점의 유효 BPM을 계산
+        // 상태를 추적하며 BPM 변화 시점의 유효 BPM을 계산
+        // TS 변화는 이후 BPM 계산에 반영하되, channel 08에는 BPM 변화 위치만 기록합니다.
         let curBpm = this.bpm;
         let curNum = initNum;
         let curDen = initDen;
@@ -197,17 +195,21 @@ class NoteData {
         while (i < allEvents.length) {
             const posSlot = allEvents[i].absSlot;
             const { measureIndex, slotIndex } = allEvents[i];
+            let hasBpmChange = false;
             while (i < allEvents.length && allEvents[i].absSlot === posSlot) {
                 const ev = allEvents[i];
-                if (ev.type === 'bpm') curBpm = ev.bpm;
+                if (ev.type === 'bpm') { curBpm = ev.bpm; hasBpmChange = true; }
                 else { curNum = ev.numerator; curDen = ev.denominator; }
                 i++;
             }
-            effectiveChanges.push({
-                measureIndex,
-                slotIndex,
-                effectiveBpm: computeEffectiveBpm(curBpm, curDen),
-            });
+            // BPM 변화가 있는 위치만 channel 08에 기록
+            if (hasBpmChange) {
+                effectiveChanges.push({
+                    measureIndex,
+                    slotIndex,
+                    effectiveBpm: computeEffectiveBpm(curBpm, curNum, curDen),
+                });
+            }
         }
 
         // ── 고유 유효 BPM 값 → 2자리 대문자 16진수 인덱스 매핑 ──
