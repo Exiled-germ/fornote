@@ -133,7 +133,16 @@ class NoteData {
 
     // 데이터를 Export 포맷 텍스트로 변환 (txtTojson.cs 호환 형식)
     exportToTXT() {
-        let txt = `#BPM ${this.bpm}\n`;
+        // 박자(시그니처)를 반영한 실제 BPM 계산:
+        // 4/4 기준으로 환산 → adjustedBpm = bpm * denominator / numerator
+        // 예) 2/4, BPM 100 → 100 * 4/2 = 200
+        const { numerator, denominator } = this.timeSignature;
+        const adjustBpm = (bpm) => {
+            const adjusted = bpm * denominator / numerator;
+            return Number.isInteger(adjusted) ? adjusted : Math.round(adjusted * 100) / 100;
+        };
+
+        let txt = `#BPM ${adjustBpm(this.bpm)}\n`;
 
         // ── BPM 변화 정의 헤더: 고유 BPM 값마다 #BPMxx value ──
         // 동일한 BPM 값은 같은 인덱스(01, 02, ..., 0A, 0B, ...)를 공유
@@ -148,7 +157,7 @@ class NoteData {
             bpmIndexMap.set(val, (i + 1).toString(16).padStart(2, '0').toUpperCase());
         });
         for (const [val, idx] of bpmIndexMap) {
-            txt += `#BPM${idx} ${val}\n`;
+            txt += `#BPM${idx} ${adjustBpm(val)}\n`;
         }
 
         txt += `*---------------------- MAIN DATA FIELD\n`;
