@@ -81,14 +81,17 @@ class NoteData {
         this.lanes[laneName][measureIndex] = chars.join('');
     }
 
-    // 드래그 노트 토글용 (0 <-> 2)
+    // 드래그 노트 사이클용 (0 → 1 → 2 → 0)
     toggleDragSlot(laneName, measureIndex, slotIndex) {
         let measureData = this.getMeasureData(laneName, measureIndex);
         if (!measureData) return;
         if (slotIndex < 0 || slotIndex >= this.slotsPerMeasure) return;
 
         let chars = measureData.split('');
-        chars[slotIndex] = chars[slotIndex] === '2' ? '0' : '2';
+        const cur = chars[slotIndex];
+        if (cur === '0') chars[slotIndex] = '1';
+        else if (cur === '1') chars[slotIndex] = '2';
+        else chars[slotIndex] = '0';
         this.lanes[laneName][measureIndex] = chars.join('');
     }
 

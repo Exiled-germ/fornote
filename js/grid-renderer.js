@@ -300,12 +300,12 @@ class GridRenderer {
                 for (let s = 0; s < mData.length; s++) {
                     const v = mData[s];
 
-                    // ── 드래그 노트: 단일 빨간 타일 (값 '2', 하위호환 '1') ──
+                    // ── 드래그 노트: 단일 타일 (값 '1' → 노란색, '2' → 빨간색) ──
                     if (type === 'drag') {
-                        if (v === '2' || v === '1') {
+                        if (v === '1' || v === '2') {
                             const noteY = this.getY(m, s);
                             if (noteY >= -30 && noteY <= this.height + 30) {
-                                ctx.fillStyle = "#ff2222";
+                                ctx.fillStyle = v === '2' ? "#ff2222" : "#ffcc00";
                                 const ch = Math.max(6, this.slotHeight * 0.4);
                                 ctx.fillRect(laneX + 3, noteY - ch / 2, this.laneWidth - 6, ch);
                                 drawnCount++;
