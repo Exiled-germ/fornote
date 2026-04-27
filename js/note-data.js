@@ -14,6 +14,9 @@ class NoteData {
         // 마디 크기(슬롯 수) 계산
         this.slotsPerMeasure = this.timeSignature.numerator * this.slotsPerBeat;
 
+        // BPM 변화 기록: [{ measureIndex, slotIndex, bpm }, ...]  (measureIndex는 1-indexed)
+        this.bpmChanges = [];
+
         // 9개 행 초기화
         this.lanes = {
             normal_1: {}, normal_2: {}, normal_3: {},
@@ -32,6 +35,8 @@ class NoteData {
         // slotsPerBeat는 이미 분모(den) 기준이므로, 단순히 분자 × slotsPerBeat
         // 예: 4/4 → 4 * 12 = 48, 6/8 → 6 * 24 = 144, 4/16 → 4 * 48 = 192
         this.slotsPerMeasure = num * slotsPerBeat;
+        // MIDI 파일 로드 시 BPM 변화 기록 초기화 (MIDI 파일 자체에서 재설정됨)
+        this.bpmChanges = [];
         console.log(`Metadata updated: BPM=${this.bpm}, TS=${num}/${den}, slotsPerBeat=${slotsPerBeat}, slotsPerMeasure=${this.slotsPerMeasure}`);
     }
 
@@ -114,6 +119,7 @@ class NoteData {
         for (let lane in this.lanes) {
             this.lanes[lane] = {};
         }
+        this.bpmChanges = [];
     }
 
     // MIDI에서 추출된 노트를 Normal 1에만 추가합니다.
@@ -125,14 +131,39 @@ class NoteData {
         this.setSlot('normal_1', measureIndex, slotIndex, '1');
     }
 
-    // 데이터를 Export 포맷 텍스트로 변환
+    // 데이터를 Export 포맷 텍스트로 변환 (txtTojson.cs 호환 형식)
     exportToTXT() {
-        let txt = `[HEADER]
-BPM=${this.bpm}
-TimeSignature=${this.timeSignature.numerator}/${this.timeSignature.denominator}
-SlotsPerBeat=${this.slotsPerBeat}
-TotalMeasures=${this.totalMeasures}
-\n`;
+        let txt = `#BPM ${this.bpm}\n`;
+
+        // ── BPM 변화 정의 헤더: 고유 BPM 값마다 #BPMxx value ──
+        // 동일한 BPM 값은 같은 인덱스(01, 02, ..., 0A, 0B, ...)를 공유
+        const bpmValueSet = new Set();
+        for (const change of this.bpmChanges) {
+            bpmValueSet.add(change.bpm);
+        }
+        const bpmValues = Array.from(bpmValueSet).sort((a, b) => a - b);
+        // bpm 값 → 2자리 대문자 16진수 인덱스 ("01", "02", "0A", ...)
+        const bpmIndexMap = new Map();
+        bpmValues.forEach((val, i) => {
+            bpmIndexMap.set(val, (i + 1).toString(16).padStart(2, '0').toUpperCase());
+        });
+        for (const [val, idx] of bpmIndexMap) {
+            txt += `#BPM${idx} ${val}\n`;
+        }
+
+        txt += `*---------------------- MAIN DATA FIELD\n`;
+
+        const laneChannelMap = {
+            normal_1: 11,
+            normal_2: 12,
+            normal_3: 13,
+            long_1:   51,
+            long_2:   52,
+            long_3:   53,
+            drag_1:   18,
+            drag_2:   19,
+            drag_3:   20,
+        };
 
         const lanesOrder = [
             'normal_1', 'normal_2', 'normal_3',
@@ -140,58 +171,52 @@ TotalMeasures=${this.totalMeasures}
             'drag_1', 'drag_2', 'drag_3'
         ];
 
-        
         for (const lane of lanesOrder) {
-            txt += `[${lane.toUpperCase()}]\n`;
-            let channel = 0
+            const channel = laneChannelMap[lane];
 
-            switch(lane){
-                case 'normal_1':
-                    channel = 11
-                    break;
-                case 'normal_2':
-                    channel = 12
-                    break;
-                case 'normal_2':
-                    channel = 13
-                    break;
-                case 'long_1':
-                    channel = 51;
-                    break;
-                case 'long_2':
-                    channel = 52;
-                    break;
-                case 'long_3':
-                    channel = 53;
-                    break;
-                case 'drag_1':
-                    channel = 18
-                    break;
-                case 'drag_1':
-                    channel = 19
-                    break;
-                case 'drag_1':
-                    channel = 20
-                    break;
-                default:
-                    channel = 11
-                    break;
-                    
-            }
-            
             for (let m = 1; m <= this.totalMeasures; m++) {
                 let mData = this.getMeasureData(lane, m);
-            
+
                 mData = mData
                     .split('')
                     .map(v => v === '1' ? '01' : '00')
                     .join('');
-            
+
                 if (mData.includes('1')) {
-                    txt += `#${(m-1).toString().padStart(3, '0')}${channel.toString().padStart(2, '0')}:${mData}\n`;
+                    const bar = (m - 1).toString().padStart(3, '0');
+                    txt += `#${bar}${channel.toString().padStart(2, '0')}:${mData}\n`;
                 }
             }
-            txt += "\n";
+        }
+
+        // ── BPM 변화 채널 (channel 08) ──
+        // 마디별로 그룹핑한 뒤, 슬롯 배열을 구성해 노트처럼 출력
+        if (this.bpmChanges.length > 0) {
+            const bpmByMeasure = new Map();
+            for (const change of this.bpmChanges) {
+                if (!bpmByMeasure.has(change.measureIndex)) {
+                    bpmByMeasure.set(change.measureIndex, []);
+                }
+                bpmByMeasure.get(change.measureIndex).push(change);
+            }
+
+            // 마디 순서대로 정렬해 출력
+            const sortedMeasures = Array.from(bpmByMeasure.keys()).sort((a, b) => a - b);
+            for (const measureIndex of sortedMeasures) {
+                const bar = (measureIndex - 1).toString().padStart(3, '0');
+                const slots = new Array(this.slotsPerMeasure).fill('00');
+                for (const change of bpmByMeasure.get(measureIndex)) {
+                    const idx = bpmIndexMap.get(change.bpm);
+                    if (idx !== undefined && change.slotIndex >= 0 && change.slotIndex < this.slotsPerMeasure) {
+                        slots[change.slotIndex] = idx;
+                    }
+                }
+                const lineData = slots.join('');
+                // 모든 슬롯이 '00'이 아닐 때만 출력
+                if (lineData !== '00'.repeat(this.slotsPerMeasure)) {
+                    txt += `#${bar}08:${lineData}\n`;
+                }
+            }
         }
 
         return txt;
