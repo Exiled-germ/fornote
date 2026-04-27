@@ -153,62 +153,13 @@ class NoteData {
 
     // 데이터를 Export 포맷 텍스트로 변환 (txtTojson.cs 호환 형식)
     exportToTXT() {
-        // ── 유효 BPM 계산 (4/4 기준 환산): rawBpm * den / num ──
-        const computeEffectiveBpm = (rawBpm, num, den) => {
-            const v = rawBpm * den / num;
-            return Number.isInteger(v) ? v : Math.round(v * 100) / 100;
-        };
+        let txt = `#BPM ${this.bpm}\n`;
 
-        const initNum = this.timeSignature.numerator;
-        const initDen = this.timeSignature.denominator;
-        let txt = `#BPM ${computeEffectiveBpm(this.bpm, initNum, initDen)}\n`;
-
-        // ── bpmChanges + tsChanges를 절대 슬롯 위치 기준으로 병합 ──
-        // 같은 위치에서 BPM 변경을 먼저, 박자 변경을 나중에 적용
-        const allEvents = [];
-        for (const c of this.bpmChanges) {
-            allEvents.push({
-                absSlot: (c.measureIndex - 1) * this.slotsPerMeasure + c.slotIndex,
-                measureIndex: c.measureIndex, slotIndex: c.slotIndex,
-                type: 'bpm', bpm: c.bpm,
-            });
-        }
-        for (const c of this.tsChanges) {
-            allEvents.push({
-                absSlot: (c.measureIndex - 1) * this.slotsPerMeasure + c.slotIndex,
-                measureIndex: c.measureIndex, slotIndex: c.slotIndex,
-                type: 'ts', numerator: c.numerator, denominator: c.denominator,
-            });
-        }
-        allEvents.sort((a, b) => a.absSlot - b.absSlot || (a.type === 'bpm' ? -1 : 1));
-
-        // 상태를 추적하며 각 변경 시점의 유효 BPM을 계산
-        let curBpm = this.bpm;
-        let curNum = initNum;
-        let curDen = initDen;
-        const effectiveChanges = [];
-        let i = 0;
-        while (i < allEvents.length) {
-            const posSlot = allEvents[i].absSlot;
-            const { measureIndex, slotIndex } = allEvents[i];
-            while (i < allEvents.length && allEvents[i].absSlot === posSlot) {
-                const ev = allEvents[i];
-                if (ev.type === 'bpm') curBpm = ev.bpm;
-                else { curNum = ev.numerator; curDen = ev.denominator; }
-                i++;
-            }
-            effectiveChanges.push({
-                measureIndex,
-                slotIndex,
-                effectiveBpm: computeEffectiveBpm(curBpm, curNum, curDen),
-            });
-        }
-
-        // ── 고유 유효 BPM 값 → 2자리 대문자 16진수 인덱스 매핑 ──
-        const effectiveBpmSet = new Set(effectiveChanges.map(c => c.effectiveBpm));
-        const effectiveBpmValues = Array.from(effectiveBpmSet).sort((a, b) => a - b);
+        // ── BPM 변화만 처리 (tsChanges는 BPM에 영향 없음) ──
+        const bpmValueSet = new Set(this.bpmChanges.map(c => c.bpm));
+        const sortedBpmValues = Array.from(bpmValueSet).sort((a, b) => a - b);
         const bpmIndexMap = new Map();
-        effectiveBpmValues.forEach((val, idx) => {
+        sortedBpmValues.forEach((val, idx) => {
             bpmIndexMap.set(val, (idx + 1).toString(16).padStart(2, '0').toUpperCase());
         });
         for (const [val, idx] of bpmIndexMap) {
@@ -253,14 +204,14 @@ class NoteData {
             }
         }
 
-        // ── 유효 BPM 변화 채널 (channel 08): bpmChanges + tsChanges 통합 ──
-        if (effectiveChanges.length > 0) {
+        // ── BPM 변화 채널 (channel 08): bpmChanges만 사용 ──
+        if (this.bpmChanges.length > 0) {
             const changesByMeasure = new Map();
-            for (const change of effectiveChanges) {
-                if (!changesByMeasure.has(change.measureIndex)) {
-                    changesByMeasure.set(change.measureIndex, []);
+            for (const c of this.bpmChanges) {
+                if (!changesByMeasure.has(c.measureIndex)) {
+                    changesByMeasure.set(c.measureIndex, []);
                 }
-                changesByMeasure.get(change.measureIndex).push(change);
+                changesByMeasure.get(c.measureIndex).push(c);
             }
 
             const sortedMeasures = Array.from(changesByMeasure.keys()).sort((a, b) => a - b);
@@ -268,7 +219,7 @@ class NoteData {
                 const bar = (measureIndex - 1).toString().padStart(3, '0');
                 const slots = new Array(this.slotsPerMeasure).fill('00');
                 for (const change of changesByMeasure.get(measureIndex)) {
-                    const idx = bpmIndexMap.get(change.effectiveBpm);
+                    const idx = bpmIndexMap.get(change.bpm);
                     if (idx !== undefined && change.slotIndex >= 0 && change.slotIndex < this.slotsPerMeasure) {
                         slots[change.slotIndex] = idx;
                     }
