@@ -127,8 +127,8 @@ class NoteData {
 
     /**
      * 데이터를 Export 포맷 텍스트로 변환
-     * [Note], [Longnote] 섹션 구분 및 마디번호 기준 정렬
-     * 형식: #마디번호:데이터 (마디번호로 정렬)
+     * 모든 레인을 마디번호 기준으로 정렬하여 출력
+     * 형식: #마디번호채널:데이터
      */
     exportToTXT() {
         let txt = `[HEADER]
@@ -151,13 +151,20 @@ TotalMeasures=${this.totalMeasures}
             'drag_3': 20
         };
 
-        // Note 섹션 (Normal lanes) - 마디번호 기준 정렬
-        txt += '[Note]\n';
-        const normalLanes = ['normal_1', 'normal_2', 'normal_3'];
-        const noteData = [];
+        const lanesOrder = [
+            'normal_1', 'normal_2', 'normal_3',
+            'long_1', 'long_2', 'long_3',
+            'drag_1', 'drag_2', 'drag_3'
+        ];
 
-        for (let m = 1; m <= this.totalMeasures; m++) {
-            for (const lane of normalLanes) {
+        // 모든 데이터를 수집
+        const allData = [];
+
+        for (const lane of lanesOrder) {
+            txt += `[${lane.toUpperCase()}]\n`;
+            const channel = channelMap[lane];
+
+            for (let m = 1; m <= this.totalMeasures; m++) {
                 let mData = this.getMeasureData(lane, m);
                 mData = mData
                     .split('')
@@ -165,54 +172,33 @@ TotalMeasures=${this.totalMeasures}
                     .join('');
                 
                 if (mData.includes('1')) {
-                    const channel = channelMap[lane];
-                    noteData.push({
+                    allData.push({
                         measure: m,
                         channel: channel,
+                        lane: lane,
                         data: mData
                     });
                 }
             }
+
+            txt += '\n';
         }
 
-        // 마디번호 기준 정렬
-        noteData.sort((a, b) => a.measure - b.measure);
-        for (const item of noteData) {
-            txt += `#${(item.measure - 1).toString().padStart(3, '0')}${item.channel.toString().padStart(2, '0')}:${item.data}\n`;
-        }
-        txt += '\n';
+        // 마디번호 기준으로 정렬
+        allData.sort((a, b) => a.measure - b.measure);
 
-        // Longnote 섹션 (Long + Drag lanes) - 마디번호 기준 정렬
-        txt += '[Longnote]\n';
-        const longnotes = ['long_1', 'long_2', 'long_3', 'drag_1', 'drag_2', 'drag_3'];
-        const longnoteData = [];
+        // 정렬된 데이터를 출력 형식으로 변환
+        let result = `[HEADER]
+BPM=${this.bpm}
+TimeSignature=${this.timeSignature.numerator}/${this.timeSignature.denominator}
+SlotsPerBeat=${this.slotsPerBeat}
+TotalMeasures=${this.totalMeasures}
+\n`;
 
-        for (let m = 1; m <= this.totalMeasures; m++) {
-            for (const lane of longnotes) {
-                let mData = this.getMeasureData(lane, m);
-                mData = mData
-                    .split('')
-                    .map(v => v === '1' ? '01' : '00')
-                    .join('');
-                
-                if (mData.includes('1')) {
-                    const channel = channelMap[lane];
-                    longnoteData.push({
-                        measure: m,
-                        channel: channel,
-                        data: mData
-                    });
-                }
-            }
+        for (const item of allData) {
+            result += `#${(item.measure - 1).toString().padStart(3, '0')}${item.channel.toString().padStart(2, '0')}:${item.data}\n`;
         }
 
-        // 마디번호 기준 정렬
-        longnoteData.sort((a, b) => a.measure - b.measure);
-        for (const item of longnoteData) {
-            txt += `#${(item.measure - 1).toString().padStart(3, '0')}${item.channel.toString().padStart(2, '0')}:${item.data}\n`;
-        }
-        txt += '\n';
-
-        return txt;
+        return result;
     }
 }
