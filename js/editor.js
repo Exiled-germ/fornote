@@ -9,7 +9,7 @@ class Editor {
         this.renderer = renderer;
 
         // 상태 변수
-        this.currentMode = 'normal';   // normal, long, drag, delete
+        this.currentMode = 'write';    // write, delete
 
         this.isDragging = false;
         this.dragStartAbsSlot = -1;
@@ -20,17 +20,6 @@ class Editor {
 
     setMode(mode) {
         this.currentMode = mode;
-    }
-
-    // 클릭 위치에서 편집 대상 laneName을 결정
-    // 모드와 마우스 X 위치의 레인 인덱스 조합으로 결정 (예: long 모드 + laneIdx 4 = 'long_2')
-    getTargetLaneName(laneIdx) {
-        if (laneIdx < 0 || laneIdx >= 9) return null;
-        const laneNum = (laneIdx % 3) + 1;
-        if (this.currentMode === 'normal') return 'normal_' + laneNum;
-        if (this.currentMode === 'long') return 'long_' + laneNum;
-        if (this.currentMode === 'drag') return 'drag_' + laneNum;
-        return null; // delete 모드는 클릭한 레인에서 직접 결정
     }
 
     // 마우스 이벤트 -> laneName, absSlot 변환
@@ -111,21 +100,19 @@ class Editor {
                 return;
             }
 
-            // 모드에 맞는 레인 결정
-            const targetLane = this.getTargetLaneName(info.laneIdx);
-            if (!targetLane) return;
+            // 쓰기 모드: 레인 이름에서 노트 타입 결정
+            const laneType = info.laneName.split('_')[0]; // 'normal', 'long', 'drag'
 
-            // 일반노트 모드 → 토글
-            if (this.currentMode === 'normal') {
+            if (laneType === 'normal') {
+                // 일반 노트 → 토글
                 let { measureIndex, slotIndex } = this.noteData.getMeasureAndSlotFromAbsolute(info.absSlot);
-                this.noteData.toggleSlot(targetLane, measureIndex, slotIndex);
+                this.noteData.toggleSlot(info.laneName, measureIndex, slotIndex);
                 this.renderer.render();
-            } 
-            // 롱/드래그노트 모드 → 범위 시작
-            else if (this.currentMode === 'long' || this.currentMode === 'drag') {
+            } else if (laneType === 'long' || laneType === 'drag') {
+                // 롱/드래그 노트 → 범위 드래그 시작
                 this.isDragging = true;
                 this.dragStartAbsSlot = info.absSlot;
-                this.dragStartLaneName = targetLane;
+                this.dragStartLaneName = info.laneName;
             }
         });
 
@@ -143,12 +130,14 @@ class Editor {
             }
 
             if (this.isDragging) {
-                // 롱/드래그 모드 드래그 중
-                if ((this.currentMode === 'long' || this.currentMode === 'drag') && this.dragStartLaneName) {
+                const dragType = this.dragStartLaneName ? this.dragStartLaneName.split('_')[0] : '';
+
+                // 롱/드래그 노트 범위 드래그
+                if ((dragType === 'long' || dragType === 'drag') && this.dragStartLaneName) {
                     this.noteData.setRange(this.dragStartLaneName, this.dragStartAbsSlot, info.absSlot, '1');
                     this.renderer.render();
                 }
-                
+
                 // 지우개 모드
                 if (this.currentMode === 'delete' && this.dragStartLaneName) {
                     this.noteData.setRange(this.dragStartLaneName, this.dragStartAbsSlot, info.absSlot, '0');
