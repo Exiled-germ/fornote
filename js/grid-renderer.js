@@ -21,8 +21,8 @@ class GridRenderer {
         ];
         this.laneWidth = 60;
         this.measureLabelWidth = 60;
-        this.defaultSlotHeight = 30;
-        this.slotHeight = 30;
+        this.defaultMeasureHeight = 480; // 기본 마디당 픽셀 높이 (30px × 16분 기준)
+        this.measureHeight = 480;        // 마디당 픽셀 높이 (zoom의 primary 값)
         this.scrollY = 0;
 
         this.init();
@@ -48,34 +48,43 @@ class GridRenderer {
         this.render();
     }
 
+    // slotHeight는 measureHeight / spm으로 자동 계산 (spm 변화에 무관하게 마디 높이 일정)
+    get slotHeight() {
+        const spm = this.noteData.slotsPerMeasure;
+        return spm > 0 ? this.measureHeight / spm : this.measureHeight;
+    }
+
     setZoom(delta) {
-        this.slotHeight += delta;
-        if (this.slotHeight < 1) this.slotHeight = 1;
-        if (this.slotHeight > 120) this.slotHeight = 120;
+        // delta는 슬롯 단위 (4px)이지만, measureHeight 단위로 환산 (기본 슬롯 16개 기준)
+        const step = delta * (this.defaultMeasureHeight / 30); // 30px = 기본 slotHeight
+        this.measureHeight += step;
+        if (this.measureHeight < 20) this.measureHeight = 20;
+        if (this.measureHeight > 60000) this.measureHeight = 60000;
         this.updateZoomUI();
         this.render();
     }
 
     setSlotHeight(h) {
-        this.slotHeight = h;
-        if (this.slotHeight < 1) this.slotHeight = 1;
-        if (this.slotHeight > 120) this.slotHeight = 120;
+        // 외부 호환용 — slotHeight 단위를 measureHeight로 환산
+        this.measureHeight = h * this.noteData.slotsPerMeasure;
+        if (this.measureHeight < 20) this.measureHeight = 20;
+        if (this.measureHeight > 60000) this.measureHeight = 60000;
         this.updateZoomUI();
         this.render();
     }
 
     // 전체 마디를 화면에 맞추기
     zoomFit() {
-        const totalSlots = this.noteData.totalMeasures * this.noteData.slotsPerMeasure;
-        if (totalSlots <= 0) return;
-        this.slotHeight = Math.max(1, this.height / totalSlots);
+        const totalMeasures = this.noteData.totalMeasures;
+        if (totalMeasures <= 0) return;
+        this.measureHeight = Math.max(20, this.height / totalMeasures);
         this.scrollY = 0;
         this.updateZoomUI();
         this.render();
     }
 
     getZoomPercent() {
-        return Math.round((this.slotHeight / this.defaultSlotHeight) * 100);
+        return Math.round((this.measureHeight / this.defaultMeasureHeight) * 100);
     }
 
     updateZoomUI() {
@@ -86,7 +95,7 @@ class GridRenderer {
     scroll(delta) {
         this.scrollY += delta;
         if (this.scrollY < 0) this.scrollY = 0;
-        const totalHeight = this.noteData.totalMeasures * this.noteData.slotsPerMeasure * this.slotHeight;
+        const totalHeight = this.noteData.totalMeasures * this.measureHeight;
         if (this.scrollY > totalHeight) this.scrollY = totalHeight;
         this.render();
     }

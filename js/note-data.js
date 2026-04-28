@@ -51,13 +51,13 @@ class NoteData {
         console.log(`Metadata updated: BPM=${this.bpm}, TS=${num}/${den}, slotsPerBeat=${slotsPerBeat}, slotsPerMeasure=${this.slotsPerMeasure}`);
     }
 
-    // 활성 그리드 변경 — slotsPerMeasure = n으로 직접 설정, 노트는 새 해상도로 재양자화
+    // 활성 그리드 변경 — slotsPerMeasure는 LCM(현재, n)으로만 증가 (기존 노트 위치 불변)
     setGrid(n) {
         if (!Number.isInteger(n) || n < 1) return;
         this.activeGrid = n;
-        const newSPM = n;
+        const newSPM = NoteData._lcm(this.slotsPerMeasure, n);
         if (newSPM !== this.slotsPerMeasure) {
-            this._remapAllData(this.slotsPerMeasure, newSPM);
+            this._expandAllData(this.slotsPerMeasure, newSPM);
             this.slotsPerMeasure = newSPM;
             this.slotsPerBeat = Math.max(1, Math.floor(newSPM / this.timeSignature.numerator));
         }
@@ -83,6 +83,30 @@ class NoteData {
         this.bpmChanges = this.bpmChanges.map(c => ({
             ...c,
             slotIndex: Math.round(c.slotIndex * newSPM / oldSPM)
+        }));
+    }
+
+    // 배열을 LCM 확장 — 기존 노트 인덱스는 비례확장으로 정확히 보존 (그리드 변경 시 사용)
+    _expandAllData(oldSPM, newSPM) {
+        const factor = newSPM / oldSPM; // 항상 정수 (LCM 보장)
+        for (const lane in this.lanes) {
+            for (const m of Object.keys(this.lanes[lane])) {
+                const data = this.lanes[lane][m];
+                if (!data) continue;
+                const newData = new Array(newSPM).fill('0');
+                for (let i = 0; i < Math.min(data.length, oldSPM); i++) {
+                    if (data[i] !== '0') {
+                        const newI = i * factor; // 정수 배수이므로 정확
+                        if (newI < newSPM) newData[newI] = data[i];
+                    }
+                }
+                this.lanes[lane][m] = newData.join('');
+            }
+        }
+        // BPM 변화 슬롯도 확장
+        this.bpmChanges = this.bpmChanges.map(c => ({
+            ...c,
+            slotIndex: c.slotIndex * factor
         }));
     }
 

@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         midiParser.showNotification(`♩ BPM → ${newBpm}`);
     });
 
-    // 8. 그리드 분할 수 조절 (slotsPerMeasure = n으로 직접 설정, 노트 재양자화)
+    // 8. 그리드 분할 수 조절 (activeGrid = n, slotsPerMeasure = LCM 누적, 노트 위치 불변)
     function syncGridUI() {
         const active = noteData.activeGrid;
         const gridInput = document.getElementById('grid-input');
@@ -205,16 +205,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyGrid(value) {
         const val = Math.max(1, Math.min(192, parseInt(value, 10)));
         if (isNaN(val)) return;
-        const oldSpm = noteData.slotsPerMeasure;
         noteData.setGrid(val);
-        const newSpm = noteData.slotsPerMeasure;
         syncGridUI();
-        // spm이 바뀌어도 마디 물리 높이(slotHeight × spm)를 유지
-        if (newSpm !== oldSpm && newSpm > 0) {
-            renderer.setSlotHeight(renderer.slotHeight * oldSpm / newSpm);
-        } else {
-            renderer.render();
-        }
+        renderer.render();
     }
 
     const gridInput = document.getElementById('grid-input');
