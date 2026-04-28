@@ -51,11 +51,11 @@ class NoteData {
         console.log(`Metadata updated: BPM=${this.bpm}, TS=${num}/${den}, slotsPerBeat=${slotsPerBeat}, slotsPerMeasure=${this.slotsPerMeasure}`);
     }
 
-    // 활성 그리드 변경 — slotsPerMeasure는 LCM(현재 spm, n)으로 단조증가만 허용 (노트 손실 방지)
+    // 활성 그리드 변경 — slotsPerMeasure = n으로 직접 설정, 노트는 새 해상도로 재양자화
     setGrid(n) {
         if (!Number.isInteger(n) || n < 1) return;
         this.activeGrid = n;
-        const newSPM = NoteData._lcm(this.slotsPerMeasure, n);
+        const newSPM = n;
         if (newSPM !== this.slotsPerMeasure) {
             this._remapAllData(this.slotsPerMeasure, newSPM);
             this.slotsPerMeasure = newSPM;

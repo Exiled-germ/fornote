@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         midiParser.showNotification(`♩ BPM → ${newBpm}`);
     });
 
-    // 8. 그리드 분할 수 조절 (단일선택 — slotsPerMeasure = LCM(현재, 선택값), 노트 손실 없음)
+    // 8. 그리드 분할 수 조절 (slotsPerMeasure = n으로 직접 설정, 노트 재양자화)
     function syncGridUI() {
         const active = noteData.activeGrid;
         const gridInput = document.getElementById('grid-input');
