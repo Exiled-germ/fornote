@@ -109,7 +109,13 @@ class GridRenderer {
 
     getSlotFromY(y) {
         const absoluteY = this.height - y + this.scrollY;
-        let absSlot = Math.round(absoluteY / this.slotHeight);
+        const rawAbsSlot = absoluteY / this.slotHeight;
+
+        // 스냅 간격 = slotsPerMeasure / activeGrid
+        const spm = this.noteData.slotsPerMeasure;
+        const grid = this.noteData.activeGrid || spm;
+        const snapInterval = Math.max(1, Math.round(spm / grid));
+        let absSlot = Math.round(rawAbsSlot / snapInterval) * snapInterval;
         if (absSlot < 0) absSlot = 0;
         return absSlot;
     }
@@ -138,28 +144,12 @@ class GridRenderer {
         const gridEndX = gridStartX + (this.laneNames.length * this.laneWidth);
 
         // ===== 1. 그리드 가로선 =====
-        // slotsPerMeasure = LCM(activeGridDivisions) — 각 활성 그리드의 분할 간격 계산
         const spm = this.noteData.slotsPerMeasure;
         const spb = this.noteData.slotsPerBeat;  // 1박당 슬롯 (박 선 표시용)
 
-        // 활성 그리드 분할 간격 목록: grid=N → 간격 = spm/N 슬롯
-        const activeGridIntervals = [];
-        for (const div of (this.noteData.activeGridDivisions || new Set([spm]))) {
-            const interval = Math.round(spm / div);
-            if (interval >= 1) activeGridIntervals.push(interval);
-        }
-        // 분할 간격별 색상 팔레트 (최대 8가지 그리드 색상)
-        const gridColors = [
-            "rgba(80,220,200,0.35)",
-            "rgba(255,160,80,0.35)",
-            "rgba(180,120,255,0.35)",
-            "rgba(80,200,100,0.35)",
-            "rgba(255,80,130,0.35)",
-            "rgba(80,160,255,0.35)",
-            "rgba(255,220,60,0.35)",
-            "rgba(200,200,200,0.25)",
-        ];
-        const sortedIntervals = [...new Set(activeGridIntervals)].sort((a, b) => b - a);
+        // 활성 그리드 스냅 간격 (분할선 표시용)
+        const grid = this.noteData.activeGrid || spm;
+        const snapInterval = Math.max(1, Math.round(spm / grid));
 
         ctx.lineWidth = 1;
         for (let m = 1; m <= this.noteData.totalMeasures; m++) {
@@ -169,6 +159,7 @@ class GridRenderer {
 
                 const isMeasureLine = (s === 0);
                 const isBeatLine = (!isMeasureLine && spb >= 1 && s % spb === 0);
+                const isGridSnap = !isMeasureLine && !isBeatLine && (s % snapInterval === 0);
 
                 if (isMeasureLine) {
                     // ── 마디선 (굵은 흰색) ──
@@ -186,22 +177,14 @@ class GridRenderer {
                     ctx.lineWidth = 1.5;
                     ctx.beginPath(); ctx.moveTo(gridStartX, y); ctx.lineTo(gridEndX, y); ctx.stroke();
                     ctx.lineWidth = 1;
+                } else if (isGridSnap) {
+                    // ── 현재 그리드 스냅 분할선 (청록색) ──
+                    ctx.strokeStyle = "rgba(80,220,200,0.35)";
+                    ctx.beginPath(); ctx.moveTo(gridStartX, y); ctx.lineTo(gridEndX, y); ctx.stroke();
                 } else {
-                    // ── 활성 그리드 분할선: 가장 거친(큰 간격) 그리드부터 색상 적용 ──
-                    let drawn = false;
-                    for (let ci = 0; ci < sortedIntervals.length; ci++) {
-                        if (s % sortedIntervals[ci] === 0) {
-                            ctx.strokeStyle = gridColors[ci % gridColors.length];
-                            ctx.beginPath(); ctx.moveTo(gridStartX, y); ctx.lineTo(gridEndX, y); ctx.stroke();
-                            drawn = true;
-                            break;
-                        }
-                    }
-                    if (!drawn) {
-                        // ── 비활성 슬롯 (그리드 경계 아님) ──
-                        ctx.strokeStyle = "rgba(255,255,255,0.03)";
-                        ctx.beginPath(); ctx.moveTo(gridStartX, y); ctx.lineTo(gridEndX, y); ctx.stroke();
-                    }
+                    // ── 비스냅 슬롯 (다른 그리드로 배치된 노트 위치 등) ──
+                    ctx.strokeStyle = "rgba(255,255,255,0.03)";
+                    ctx.beginPath(); ctx.moveTo(gridStartX, y); ctx.lineTo(gridEndX, y); ctx.stroke();
                 }
             }
         }

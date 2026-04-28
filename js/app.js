@@ -192,40 +192,32 @@ document.addEventListener('DOMContentLoaded', () => {
         midiParser.showNotification(`♩ BPM → ${newBpm}`);
     });
 
-    // 8. 그리드 분할 수 조절 (토글 방식 — 복수 선택 가능, slotsPerMeasure = LCM)
+    // 8. 그리드 분할 수 조절 (단일선택 — slotsPerMeasure = LCM(현재, 선택값), 노트 손실 없음)
     function syncGridUI() {
-        const active = noteData.activeGridDivisions;
+        const active = noteData.activeGrid;
         const gridInput = document.getElementById('grid-input');
-        if (gridInput) gridInput.value = noteData.slotsPerMeasure; // 현재 LCM 표시
+        if (gridInput) gridInput.value = active;
         document.querySelectorAll('.grid-preset-btn').forEach(btn => {
-            btn.classList.toggle('active', active.has(parseInt(btn.dataset.grid, 10)));
+            btn.classList.toggle('active', parseInt(btn.dataset.grid, 10) === active);
         });
     }
 
-    function toggleGrid(value) {
+    function applyGrid(value) {
         const val = Math.max(1, Math.min(192, parseInt(value, 10)));
         if (isNaN(val)) return;
-        const next = new Set(noteData.activeGridDivisions);
-        if (next.has(val)) {
-            if (next.size === 1) return; // 최소 1개 유지
-            next.delete(val);
-        } else {
-            next.add(val);
-        }
-        noteData.setActiveGrids(next);
+        noteData.setGrid(val);
         syncGridUI();
         renderer.render();
     }
 
     const gridInput = document.getElementById('grid-input');
     if (gridInput) {
-        // 입력 필드: 직접 숫자 입력 시 해당 값을 토글
-        gridInput.addEventListener('change', (e) => toggleGrid(e.target.value));
-        gridInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') toggleGrid(e.target.value); });
+        gridInput.addEventListener('change', (e) => applyGrid(e.target.value));
+        gridInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyGrid(e.target.value); });
     }
 
     document.querySelectorAll('.grid-preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => toggleGrid(btn.dataset.grid));
+        btn.addEventListener('click', () => applyGrid(btn.dataset.grid));
     });
 
     // 초기 UI 동기화 (기본값 16)

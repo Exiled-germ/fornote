@@ -4,13 +4,9 @@
  */
 
 class NoteData {
-    // ──── LCM 헬퍼 ────
+    // ──── LCM / GCD 헬퍼 ────
     static _gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
     static _lcm(a, b) { return Math.round(a / NoteData._gcd(a, b)) * b; }
-    static _lcmOfSet(set) {
-        if (set.size === 0) return 1;
-        return [...set].reduce((acc, v) => NoteData._lcm(acc, v), 1);
-    }
 
     constructor() {
         // 기본 메타데이터
@@ -18,9 +14,10 @@ class NoteData {
         this.timeSignature = { numerator: 4, denominator: 4 };
         this.totalMeasures = 40;
 
-        // 활성 그리드 등분 목록 — slotsPerMeasure = LCM(activeGridDivisions)
-        this.activeGridDivisions = new Set([16]); // 기본값: 16등분
-        this.slotsPerMeasure = NoteData._lcmOfSet(this.activeGridDivisions);
+        // 현재 활성 그리드 (단일 정수, 스냅 기준)
+        this.activeGrid = 16; // 기본값: 16등분
+        // slotsPerMeasure = LCM(이전 spm, activeGrid) — 노트 손실을 막기 위해 단조증가만 허용
+        this.slotsPerMeasure = this.activeGrid;
         // slotsPerBeat: MIDI 입력/녹음 양자화에 사용하는 1박당 슬롯 수
         this.slotsPerBeat = Math.max(1, Math.floor(this.slotsPerMeasure / this.timeSignature.numerator));
 
@@ -48,27 +45,25 @@ class NoteData {
         const midiSPM = num * slotsPerBeat;
         this.slotsPerBeat = slotsPerBeat;
         this.slotsPerMeasure = midiSPM;
-        // activeGridDivisions를 MIDI 해상도에 맞추어 초기화 (단일 값)
-        this.activeGridDivisions = new Set([midiSPM]);
+        this.activeGrid = midiSPM;
         this.bpmChanges = [];
         this.tsChanges = [];
         console.log(`Metadata updated: BPM=${this.bpm}, TS=${num}/${den}, slotsPerBeat=${slotsPerBeat}, slotsPerMeasure=${this.slotsPerMeasure}`);
     }
 
-    // 활성 그리드 등분 목록 변경 — slotsPerMeasure 재계산 및 기존 데이터 리맵핑
-    setActiveGrids(newDivisionsSet) {
-        if (newDivisionsSet.size === 0) return;
-        const oldSPM = this.slotsPerMeasure;
-        const newSPM = NoteData._lcmOfSet(newDivisionsSet);
-        this.activeGridDivisions = new Set(newDivisionsSet);
-        if (newSPM !== oldSPM) {
-            this._remapAllData(oldSPM, newSPM);
+    // 활성 그리드 변경 — slotsPerMeasure는 LCM(현재 spm, n)으로 단조증가만 허용 (노트 손실 방지)
+    setGrid(n) {
+        if (!Number.isInteger(n) || n < 1) return;
+        this.activeGrid = n;
+        const newSPM = NoteData._lcm(this.slotsPerMeasure, n);
+        if (newSPM !== this.slotsPerMeasure) {
+            this._remapAllData(this.slotsPerMeasure, newSPM);
             this.slotsPerMeasure = newSPM;
             this.slotsPerBeat = Math.max(1, Math.floor(newSPM / this.timeSignature.numerator));
         }
     }
 
-    // 슬롯 인덱스를 비례적으로 리맵핑 (해상도 변경 시 노트 위치 보존)
+    // 슬롯 인덱스를 비례적으로 리맵핑 (해상도 증가 시에만 호출됨 — 데이터 손실 없음)
     _remapAllData(oldSPM, newSPM) {
         for (const lane in this.lanes) {
             for (const m of Object.keys(this.lanes[lane])) {
@@ -89,6 +84,19 @@ class NoteData {
             ...c,
             slotIndex: Math.round(c.slotIndex * newSPM / oldSPM)
         }));
+    }
+
+    // 마디 내 점유 슬롯에서 최소 필요 해상도 계산 (export용)
+    // 예: spm=20, 점유={0,5,10,15} → 4, 점유={0,4,8,12,16} → 5, 점유={0,4,5,10} → 20
+    _minResolutionForData(rawData, spm) {
+        let g = spm;
+        for (let i = 0; i < rawData.length; i++) {
+            if (rawData[i] !== '0' && i > 0) {
+                g = NoteData._gcd(g, i);
+                if (g === 1) break;
+            }
+        }
+        return spm / g;
     }
 
     // 마디의 특정 레인 데이터 문자열 가져오기
@@ -263,21 +271,26 @@ class NoteData {
             const isDrag = lane.startsWith('drag');
 
             for (let m = 1; m <= this.totalMeasures; m++) {
-                let mData = this.getMeasureData(lane, m);
+                const rawData = this.getMeasureData(lane, m); // 길이 = slotsPerMeasure
 
-                mData = mData
-                    .split('')
-                    .map(v => {
-                        if (v === '1') return '01';
-                        if (isDrag && v === '2') return '02';
-                        return '00';
-                    })
-                    .join('');
+                // 점유된 슬롯이 없으면 출력 생략
+                if (!rawData.includes('1') && !rawData.includes('2')) continue;
 
-                if (mData.includes('1') || mData.includes('2')) {
-                    const bar = (m - 1).toString().padStart(3, '0');
-                    txt += `#${bar}${channel.toString().padStart(2, '0')}:${mData}\n`;
+                // 이 마디에 필요한 최소 해상도 계산 (점유 슬롯 기반 LCM)
+                const minRes = this._minResolutionForData(rawData, this.slotsPerMeasure);
+                const step = this.slotsPerMeasure / minRes; // rawData에서 step칸마다 샘플링
+
+                // minRes 길이의 export 슬롯 배열 구성
+                let mData = '';
+                for (let i = 0; i < minRes; i++) {
+                    const v = rawData[i * step];
+                    if (v === '1') mData += '01';
+                    else if (isDrag && v === '2') mData += '02';
+                    else mData += '00';
                 }
+
+                const bar = (m - 1).toString().padStart(3, '0');
+                txt += `#${bar}${channel.toString().padStart(2, '0')}:${mData}\n`;
             }
         }
 
@@ -294,15 +307,28 @@ class NoteData {
             const sortedMeasures = Array.from(bpmByMeasure.keys()).sort((a, b) => a - b);
             for (const measureIndex of sortedMeasures) {
                 const bar = (measureIndex - 1).toString().padStart(3, '0');
-                const slots = new Array(this.slotsPerMeasure).fill('00');
-                for (const change of bpmByMeasure.get(measureIndex)) {
+                // BPM 변화 슬롯에서 최소 해상도 계산
+                const changes = bpmByMeasure.get(measureIndex);
+                const rawSlots = new Array(this.slotsPerMeasure).fill(null);
+                for (const change of changes) {
                     const idx = bpmIndexMap.get(change.bpm);
                     if (idx !== undefined && change.slotIndex >= 0 && change.slotIndex < this.slotsPerMeasure) {
-                        slots[change.slotIndex] = idx;
+                        rawSlots[change.slotIndex] = idx;
                     }
                 }
+                // 점유 여부만으로 minRes 계산 (null이 아닌 위치)
+                let g = this.slotsPerMeasure;
+                for (let i = 1; i < rawSlots.length; i++) {
+                    if (rawSlots[i] !== null) { g = NoteData._gcd(g, i); if (g === 1) break; }
+                }
+                const minRes = this.slotsPerMeasure / g;
+                const step = this.slotsPerMeasure / minRes;
+                const slots = [];
+                for (let i = 0; i < minRes; i++) {
+                    slots.push(rawSlots[i * step] !== null ? rawSlots[i * step] : '00');
+                }
                 const lineData = slots.join('');
-                if (lineData !== '00'.repeat(this.slotsPerMeasure)) {
+                if (lineData !== '00'.repeat(minRes)) {
                     txt += `#${bar}08:${lineData}\n`;
                 }
             }
