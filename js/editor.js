@@ -194,7 +194,7 @@ class Editor {
                 let delta = e.deltaY > 0 ? -2 : 2;
                 this.renderer.setZoom(delta);
             } else {
-                this.renderer.scroll(e.deltaY);
+                this.renderer.scroll(-e.deltaY);
             }
         });
 
