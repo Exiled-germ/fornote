@@ -38,6 +38,10 @@ class Editor {
         this.editDragCurAbsSlot = -1;  // 현재 마우스 위치의 absSlot (스냅 적용)
         this.editDragCurLaneIdx = -1;  // 현재 마우스 위치의 laneIdx
 
+        // 노트 바 높이 계산 상수
+        this.NOTE_MIN_HEIGHT  = 6;   // 최소 노트 높이 (px)
+        this.NOTE_HEIGHT_RATIO = 0.4; // slotHeight 대비 노트 높이 비율
+
         // 초기 canvas 클래스 설정
         this.canvas.classList.add('cursor-note');
 
@@ -461,7 +465,7 @@ class Editor {
     // ── ghost 헬퍼 ──
 
     _noteBarHeight() {
-        return Math.max(6, this.renderer.slotHeight * 0.4);
+        return Math.max(this.NOTE_MIN_HEIGHT, this.renderer.slotHeight * this.NOTE_HEIGHT_RATIO);
     }
 
     _ghostDimNormal(ctx, laneX, absSlot, laneW, fillStyle) {

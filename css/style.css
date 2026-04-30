@@ -237,9 +237,6 @@ canvas {
     display: block;
     cursor: crosshair;
 }
-canvas.cursor-note { cursor: crosshair; }
-canvas.cursor-edit  { cursor: default; }
-canvas.cursor-edit-grabbing { cursor: grabbing; }
 
 .code-font {
     font-family: monospace;
