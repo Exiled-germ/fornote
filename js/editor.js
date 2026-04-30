@@ -38,6 +38,10 @@ class Editor {
         // { anchorLaneIdx, anchorAbsSlot, curLaneIdx, curAbsSlot }
         this.multiDrag = null;
 
+        // ── 클립보드 (Ctrl+C / Ctrl+V) ──
+        // { notes: [...], anchorAbsSlot: number }
+        this.clipboard = null;
+
         // 노트 바 높이 계산 상수
         this.NOTE_MIN_HEIGHT        = 6;   // 최소 노트 높이 (px)
         this.NOTE_HEIGHT_RATIO      = 0.4; // slotHeight 대비 노트 높이 비율
@@ -77,7 +81,87 @@ class Editor {
         this.renderer.render();
     }
 
-    // 마우스 이벤트 -> laneName, absSlot 변환
+    // ═══════════════════════════════════════════════════════
+    //  복사 / 붙여넣기 (Ctrl+C / Ctrl+V)
+    // ═══════════════════════════════════════════════════════
+
+    /** 현재 선택 영역을 클립보드에 복사 */
+    _copySelection() {
+        if (!this.selection || this.selection.notes.length === 0) return;
+        this.clipboard = {
+            notes: this.selection.notes.map(n => ({ ...n })),
+            anchorAbsSlot: this.selection.minAbsSlot,
+        };
+    }
+
+    /**
+     * 클립보드 내용을 붙여넣기.
+     * 기준 마디: 현재 뷰포트에서 가장 낮은(바닥에 가까운) 마디.
+     * 그 마디가 화면에 20% 미만으로 보이면 한 마디 위(= 번호 +1)를 사용.
+     */
+    _pasteClipboard() {
+        if (!this.clipboard || this.clipboard.notes.length === 0) return;
+
+        const targetMeasure = this._getPasteTargetMeasure();
+        const spm = this.noteData.slotsPerMeasure;
+        const targetAbsSlot = (targetMeasure - 1) * spm;
+        const slotDelta = targetAbsSlot - this.clipboard.anchorAbsSlot;
+        const totalSlots = this.noteData.totalMeasures * spm;
+
+        for (const n of this.clipboard.notes) {
+            if (n.noteType === 'normal') {
+                const newAbs = n.srcAbsSlot + slotDelta;
+                if (newAbs < 0 || newAbs >= totalSlots) continue;
+                const { measureIndex: m, slotIndex: s } =
+                    this.noteData.getMeasureAndSlotFromAbsolute(newAbs);
+                this.noteData.setSlot(n.srcLaneName, m, s, '1');
+
+            } else if (n.noteType === 'long') {
+                const newStart = n.rangeStart + slotDelta;
+                const newEnd   = n.rangeEnd   + slotDelta;
+                if (newStart < 0 || newStart >= totalSlots) continue;
+                this.noteData.setRange(n.srcLaneName, newStart, Math.min(newEnd, totalSlots - 1), '1');
+
+            } else if (n.noteType === 'drag') {
+                const newAbs = n.srcAbsSlot + slotDelta;
+                if (newAbs < 0 || newAbs >= totalSlots) continue;
+                const { measureIndex: m, slotIndex: s } =
+                    this.noteData.getMeasureAndSlotFromAbsolute(newAbs);
+                this.noteData.setSlot(n.srcLaneName, m, s, n.value);
+            }
+        }
+
+        this.renderer.render();
+    }
+
+    /**
+     * 붙여넣기 기준 마디 계산.
+     * 뷰포트 바닥에 가장 가까운 마디를 반환한다.
+     * 해당 마디가 20% 미만 노출되면 한 마디 위(번호 +1)를 사용.
+     */
+    _getPasteTargetMeasure() {
+        const rdr   = this.renderer;
+        const nd    = this.noteData;
+        const slotH = rdr.slotHeight;
+        const spm   = nd.slotsPerMeasure;
+
+        // 뷰포트 바닥(Y=height)에 해당하는 절대 슬롯
+        const absSlotBottom = rdr.scrollY / slotH;
+
+        // 그 슬롯이 속하는 마디 (1-indexed)
+        let targetMeasure = Math.floor(absSlotBottom / spm) + 1;
+
+        // 해당 마디 중 화면에 보이는 비율: targetMeasure의 마지막 슬롯 - absSlotBottom
+        const visibleFraction = (targetMeasure * spm - absSlotBottom) / spm;
+        if (visibleFraction < 0.2) {
+            // 20% 미만만 보이므로 한 마디 위를 사용
+            targetMeasure += 1;
+        }
+
+        return Math.max(1, Math.min(nd.totalMeasures, targetMeasure));
+    }
+
+
     getSlotInfoFromEvent(evt) {
         const rect = this.canvas.getBoundingClientRect();
         const x = evt.clientX - rect.left;
@@ -277,6 +361,15 @@ class Editor {
                 this.isDragging = false;
                 this.dragMoved = false;
                 this.renderer.render();
+            }
+        });
+
+        // ── Ctrl+C / Ctrl+V ──
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'c') {
+                this._copySelection();
+            } else if (e.ctrlKey && e.key === 'v') {
+                this._pasteClipboard();
             }
         });
     }
