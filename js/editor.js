@@ -39,14 +39,18 @@ class Editor {
         this.multiDrag = null;
 
         // 노트 바 높이 계산 상수
-        this.NOTE_MIN_HEIGHT   = 6;   // 최소 노트 높이 (px)
-        this.NOTE_HEIGHT_RATIO = 0.4; // slotHeight 대비 노트 높이 비율
+        this.NOTE_MIN_HEIGHT        = 6;   // 최소 노트 높이 (px)
+        this.NOTE_HEIGHT_RATIO      = 0.4; // slotHeight 대비 노트 높이 비율
+        this.MIN_RECT_SEL_SIZE      = 3;   // 범위 선택 최소 드래그 크기 (px)
+        this.SELECTION_HIT_PADDING  = 8;   // 선택 영역 클릭 허용 여백 (px)
 
-        // Ln 레인 그룹 인덱스 범위 (renderer.laneNames 기준)
-        this.LN_IDX_MIN  = 0;
-        this.LN_IDX_MAX  = 2;
-        this.DRG_IDX_MIN = 3;
-        this.DRG_IDX_MAX = 5;
+        // Ln / Drg 레인 그룹 인덱스 범위 — renderer.laneNames 배열에서 동적으로 도출
+        const lns  = renderer.laneNames.reduce((acc, n, i) => n.startsWith('lane_') ? [...acc, i] : acc, []);
+        const drgs = renderer.laneNames.reduce((acc, n, i) => n.startsWith('drag_') ? [...acc, i] : acc, []);
+        this.LN_IDX_MIN  = lns.length  > 0 ? lns[0]  : 0;
+        this.LN_IDX_MAX  = lns.length  > 0 ? lns[lns.length  - 1] : 2;
+        this.DRG_IDX_MIN = drgs.length > 0 ? drgs[0] : 3;
+        this.DRG_IDX_MAX = drgs.length > 0 ? drgs[drgs.length - 1] : 5;
 
         // 초기 canvas 클래스 설정
         this.canvas.classList.add('cursor-note');
@@ -450,8 +454,8 @@ class Editor {
         const minY = Math.min(sel.startY, sel.curY);
         const maxY = Math.max(sel.startY, sel.curY);
 
-        // 최소 드래그 크기 3px 미만은 무시
-        if (maxX - minX < 3 && maxY - minY < 3) {
+        // 최소 드래그 크기 미만은 무시
+        if (maxX - minX < this.MIN_RECT_SEL_SIZE && maxY - minY < this.MIN_RECT_SEL_SIZE) {
             this.renderer.render();
             return;
         }
@@ -589,7 +593,7 @@ class Editor {
 
         const gridStartX = this.renderer.getGridStartX();
         const laneW = this.renderer.laneWidth;
-        const PAD   = 8; // 클릭 허용 여백 (px)
+        const PAD   = this.SELECTION_HIT_PADDING;
 
         let pxMinX = Infinity, pxMaxX = -Infinity;
         let pxMinY = Infinity, pxMaxY = -Infinity;
