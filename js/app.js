@@ -65,6 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
         exporter.downloadTXT();
     });
 
+    // 5c. JSON 내보내기
+    document.getElementById('export-json-btn').addEventListener('click', () => {
+        exporter.downloadJSON();
+    });
+
     // ─────────────────────────────────────────────
     //  5b. 음악 파일 로드 & 재생 버튼
     // ─────────────────────────────────────────────
